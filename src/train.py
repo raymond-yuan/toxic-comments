@@ -16,14 +16,14 @@ from models.rnn_embed import *
 from config import * 
 
 # Load the data
-train = pd.read_csv("../data/train.csv")
-test = pd.read_csv("../data/test.csv")
+train = pd.read_csv(TRAIN_DATA_FILE)
+test = pd.read_csv(TEST_DATA_FILE)
 train = train.sample(frac=1)
 
 list_sentences_train = train["comment_text"].fillna("__na__").values
 list_classes = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
 y = train[list_classes].values
-list_sentences_test = test["comment_text"].fillna("CVxTz").values
+list_sentences_test = test["comment_text"].fillna("__na__").values
 
 # Standard preprocessing
 tokenizer = text.Tokenizer(num_words=max_features)
@@ -48,13 +48,10 @@ for word, i in word_index.items():
     embedding_vector = embeddings_index.get(word)
     if embedding_vector is not None: embedding_matrix[i] = embedding_vector
 
-
 # Build model architecture
 model = get_GRU_model(embedding_matrix)
 
-
-
-file_path="weights_base.best.hdf5"
+file_path="weights_baseGRU.best.hdf5"
 checkpoint = ModelCheckpoint(file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
 early = EarlyStopping(monitor="val_loss", mode="min", patience=20)
