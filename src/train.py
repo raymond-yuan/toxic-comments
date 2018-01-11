@@ -4,11 +4,22 @@
 
 import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+import os
+from config import *
 
 # Input data files are available in the "../data/" directory.
 # For example, running this (by clicking run or pressing Shift+Enter) will list the files in the input directory
 
 from subprocess import check_output
+
+if not os.path.exists(MODEL_DIR):
+    # os.makedirs(MODEL_DIR, mode=0o777)
+    try:
+        original_umask = os.umask(0)
+        os.makedirs(MODEL_DIR, 0o777)
+    finally:
+        os.umask(original_umask)
+
 print(check_output(["ls", "../data"]).decode("utf8"))
 from keras.preprocessing import text, sequence
 from keras.callbacks import EarlyStopping, ModelCheckpoint
@@ -48,28 +59,37 @@ for word, i in word_index.items():
     embedding_vector = embeddings_index.get(word)
     if embedding_vector is not None: embedding_matrix[i] = embedding_vector
 
-# Build model architecture
-model = get_GRU_model(embedding_matrix)
+ensemble_num = 5
+ensemble = pd.read_csv("../data/sample_submission.csv")
 
-file_path="weights_baseGRU.best.hdf5"
-checkpoint = ModelCheckpoint(file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+ensemble[list_classes] = np.zeros((X_te.shape[0], len(list_classes)))
+for i in range(ensemble_num):
 
-early = EarlyStopping(monitor="val_loss", mode="min", patience=20)
+    # Build model architecture
+    model = get_GRU_model(embedding_matrix)
 
+    file_path = MODEL_DIR + "weights_baseGRU.best.{}.hdf5".format(i)
+    checkpoint = ModelCheckpoint(file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
-callbacks_list = [checkpoint, early] #early
-model.fit(X_t, y, batch_size=batch_size, epochs=epochs, validation_split=0.1, callbacks=callbacks_list)
-
-model.load_weights(file_path)
-
-y_test = model.predict(X_te)
+    early = EarlyStopping(monitor="val_loss", mode="min", patience=20)
 
 
+    callbacks_list = [checkpoint, early] #early
+    model.fit(X_t, y, batch_size=batch_size, epochs=epochs, validation_split=0.1, callbacks=callbacks_list)
+    print('Finished training!')
+    model.load_weights(file_path)
 
-sample_submission = pd.read_csv("../data/sample_submission.csv")
+    print('Performing inference')
+    y_test = model.predict(X_te)
 
-sample_submission[list_classes] = y_test
+    print('generating submission csv')
+    sample_submission = pd.read_csv("../data/sample_submission.csv")
 
+    sample_submission[list_classes] = y_test
+    ensemble[list_classes] += y_test
 
+    sample_submission.to_csv(MODEL_DIR + "baseline_{}.csv".format(i), index=False)
 
-sample_submission.to_csv("baseline.csv", index=False)
+ensemble[list_classes] /= float(ensemble_num)
+ensemble.to_csv(MODEL_DIR + "ensemble_GRU_.csv", index=False)
+
