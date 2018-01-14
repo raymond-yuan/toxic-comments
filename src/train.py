@@ -4,8 +4,9 @@
 
 import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
-import os
+import os, codecs
 from config import *
+from tqdm import tqdm
 
 # Input data files are available in the "../data/" directory.
 # For example, running this (by clicking run or pressing Shift+Enter) will list the files in the input directory
@@ -24,7 +25,7 @@ print(check_output(["ls", "../data"]).decode("utf8"))
 from keras.preprocessing import text, sequence
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from models.rnn_embed import *
-from config import * 
+
 
 # Load the data
 train = pd.read_csv(TRAIN_DATA_FILE)
@@ -46,29 +47,54 @@ X_te = sequence.pad_sequences(list_tokenized_test, maxlen=maxlen)
 
 def get_coefs(word,*arr):
     return word, np.asarray(arr, dtype='float32')
-embeddings_index = dict(get_coefs(*o.strip().split()) for o in open(EMBEDDING_FILE))
-all_embs = np.stack(embeddings_index.values())
-emb_mean, emb_std = all_embs.mean(), all_embs.std()
-print("Embedding mean: {}; Embedding std: {}".format(emb_mean, emb_std))
+
+# embeddings_index = dict(get_coefs(*o.strip().split()) for o in open(EMBEDDING_FILE))
+# embeddings_index = dict(get_coefs(*o.rstrip().rsplit()) for o in codecs.open(EMBEDDING_FILE, encoding='utf-8'))
+embeddings_index = {}
+f = codecs.open(EMBEDDING_FILE, encoding='utf-8')
+for line in tqdm(f):
+    values = line.rstrip().rsplit(' ')
+    word = values[0]
+    coefs = np.asarray(values[1:], dtype='float32')
+    embeddings_index[word] = coefs
+f.close()
+
+# print(len(embeddings_index))
+# embed_lens = set([len(e) for e in embeddings_index])
+# print(embed_lens)
+# all_embs = np.stack(embeddings_index.values())
+# emb_mean, emb_std = all_embs.mean(), all_embs.std()
+# print("Embedding mean: {}; Embedding std: {}".format(emb_mean, emb_std))
+print('found %s word vectors' % len(embeddings_index))
 
 word_index = tokenizer.word_index
 nb_words = min(max_features, len(word_index))
-embedding_matrix = np.random.normal(emb_mean, emb_std, (nb_words, embed_size))
+# embedding_matrix = np.random.normal(emb_mean, emb_std, (nb_words, embed_size))
+embedding_matrix = np.zeros((nb_words, embed_size))
 for word, i in word_index.items():
     if i >= max_features: continue
     embedding_vector = embeddings_index.get(word)
     if embedding_vector is not None: embedding_matrix[i] = embedding_vector
 
-ensemble_num = 5
-ensemble = pd.read_csv("../data/sample_submission.csv")
+if ensemble_num < 1: raise ValueError('No models run')
+if ensemble_num > 1:
+    ensemble = pd.read_csv("../data/sample_submission.csv")
+    ensemble[list_classes] = np.zeros((X_te.shape[0], len(list_classes)))
 
-ensemble[list_classes] = np.zeros((X_te.shape[0], len(list_classes)))
 for i in range(ensemble_num):
 
     # Build model architecture
-    model = get_GRU_model(embedding_matrix)
+    if model_name == 'GRU_Ensemble':
+        model = get_GRU_model(embedding_matrix)
+    elif model_name == 'GRU_MaxEnsemble':
+        model = get_GRU_Max_model(embedding_matrix)
+    elif model_name == 'LSTM_baseline':
+        model = get_LSTM_model()
+    else:
+        raise NotImplementedError('Unknown model config')
+    model = get_GRU_Max_model(embedding_matrix)
 
-    file_path = MODEL_DIR + "weights_baseGRU.best.{}.hdf5".format(i)
+    file_path = MODEL_DIR + "weights_{}.best.{}.hdf5".format(model_name, i)
     checkpoint = ModelCheckpoint(file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
     early = EarlyStopping(monitor="val_loss", mode="min", patience=20)
@@ -88,8 +114,8 @@ for i in range(ensemble_num):
     sample_submission[list_classes] = y_test
     ensemble[list_classes] += y_test
 
-    sample_submission.to_csv(MODEL_DIR + "baseline_{}.csv".format(i), index=False)
+    sample_submission.to_csv(MODEL_DIR + "{}_{}.csv".format(model_name, i), index=False)
 
-ensemble[list_classes] /= float(ensemble_num)
-ensemble.to_csv(MODEL_DIR + "ensemble_GRU_.csv", index=False)
-
+if ensemble_num > 1:
+    ensemble[list_classes] /= float(ensemble_num)
+    ensemble.to_csv(MODEL_DIR + "ensemble_{}_.csv".format(model_name), index=False)
