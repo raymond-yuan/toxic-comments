@@ -10,16 +10,8 @@ from tqdm import tqdm
 
 # Input data files are available in the "../data/" directory.
 # For example, running this (by clicking run or pressing Shift+Enter) will list the files in the input directory
-
+import utils
 from subprocess import check_output
-
-if not os.path.exists(MODEL_DIR):
-    # os.makedirs(MODEL_DIR, mode=0o777)
-    try:
-        original_umask = os.umask(0)
-        os.makedirs(MODEL_DIR, 0o777)
-    finally:
-        os.umask(original_umask)
 
 print(check_output(["ls", "../data"]).decode("utf8"))
 from keras.preprocessing import text, sequence
@@ -49,37 +41,24 @@ def get_coefs(word,*arr):
     return word, np.asarray(arr, dtype='float32')
 
 # embeddings_index = dict(get_coefs(*o.strip().split()) for o in open(EMBEDDING_FILE))
-# embeddings_index = dict(get_coefs(*o.rstrip().rsplit()) for o in codecs.open(EMBEDDING_FILE, encoding='utf-8'))
-embeddings_index = {}
-f = codecs.open(EMBEDDING_FILE, encoding='utf-8')
-for line in tqdm(f):
-    values = line.rstrip().rsplit(' ')
-    word = values[0]
-    coefs = np.asarray(values[1:], dtype='float32')
-    embeddings_index[word] = coefs
-f.close()
-
-# print(len(embeddings_index))
-# embed_lens = set([len(e) for e in embeddings_index])
-# print(embed_lens)
-# all_embs = np.stack(embeddings_index.values())
-# emb_mean, emb_std = all_embs.mean(), all_embs.std()
-# print("Embedding mean: {}; Embedding std: {}".format(emb_mean, emb_std))
-print('found %s word vectors' % len(embeddings_index))
-
-word_index = tokenizer.word_index
-nb_words = min(max_features, len(word_index))
-# embedding_matrix = np.random.normal(emb_mean, emb_std, (nb_words, embed_size))
-embedding_matrix = np.zeros((nb_words, embed_size))
-for word, i in word_index.items():
-    if i >= max_features: continue
-    embedding_vector = embeddings_index.get(word)
-    if embedding_vector is not None: embedding_matrix[i] = embedding_vector
+# embeddings_index = dict(get_coefs(*o.rstrip().rsplit()) for o in codecs.open(EMBEDDING_FILE, encoding='utf-8')
+# embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index)
+embedding_matrix = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE,
+                                                      tokenizer.word_index,
+                                                      max_features=max_features)
 
 if ensemble_num < 1: raise ValueError('No models run')
 if ensemble_num > 1:
     ensemble = pd.read_csv("../data/sample_submission.csv")
     ensemble[list_classes] = np.zeros((X_te.shape[0], len(list_classes)))
+
+if not os.path.exists(MODEL_DIR):
+    # os.makedirs(MODEL_DIR, mode=0o777)
+    try:
+        original_umask = os.umask(0)
+        os.makedirs(MODEL_DIR, 0o777)
+    finally:
+        os.umask(original_umask)
 
 for i in range(ensemble_num):
 
@@ -92,7 +71,7 @@ for i in range(ensemble_num):
         model = get_LSTM_model()
     else:
         raise NotImplementedError('Unknown model config')
-    model = get_GRU_Max_model(embedding_matrix)
+    print('Using {} model type'.format(model_name))
 
     file_path = MODEL_DIR + "weights_{}.best.{}.hdf5".format(model_name, i)
     checkpoint = ModelCheckpoint(file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
@@ -106,13 +85,14 @@ for i in range(ensemble_num):
     model.load_weights(file_path)
 
     print('Performing inference')
-    y_test = model.predict(X_te)
+    y_test = model.predict(X_te, verbose=1)
 
-    print('generating submission csv')
+    print('Generating submission csv')
     sample_submission = pd.read_csv("../data/sample_submission.csv")
 
     sample_submission[list_classes] = y_test
-    ensemble[list_classes] += y_test
+
+    if ensemble_num > 1: ensemble[list_classes] += y_test
 
     sample_submission.to_csv(MODEL_DIR + "{}_{}.csv".format(model_name, i), index=False)
 
