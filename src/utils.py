@@ -39,6 +39,7 @@ def load_w2v_embeddings(embeddings_path, word_index, max_features=100000):
     # Now create the embeddings matrix
     nb_words = min(max_features, len(word_index))
     embeddings = np.zeros((nb_words, embedding_dim))
+    print(nb_words)
     missing = set()
     for word, i in tqdm(word_index.items()):
         if i >= max_features: continue

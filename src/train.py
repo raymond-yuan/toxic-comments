@@ -46,6 +46,14 @@ def get_coefs(word,*arr):
 embedding_matrix = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE,
                                                       tokenizer.word_index,
                                                       max_features=max_features)
+embedding_file_name = 'fasttextLoader.' + EMBEDDING_FILE + '.ft-{}.npz'.format(max_features)
+if os.path.exists(embedding_file_name):
+    embedding_matrix = np.load(embedding_file_name)['embed_mat']
+else:
+    print('Generating embeddings')
+    # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index, max_features=max_features)
+    embedding_matrix, missing_idx = utils.load_fasttext_embeddings(EMBEDDING_FILE, tokenizer.word_index)
+    np.savez(embedding_file_name, embed_mat=embedding_matrix)
 
 if ensemble_num < 1: raise ValueError('No models run')
 if ensemble_num > 1:
