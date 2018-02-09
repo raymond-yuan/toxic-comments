@@ -4,6 +4,33 @@ from gensim.models import KeyedVectors, FastText
 import os, codecs
 from config import *
 
+def build_generator(X_tr, y_tr, batch_size):
+    n_examples = len(X_tr)
+    r_idxs = np.random.permutation(n_examples)
+    n_splits = 10
+    splits = int((1 / n_splits) * n_examples)
+    for val_idx in range(n_splits):
+        val_st, val_end = val_idx * splits, val_idx * splits + splits
+        x_val = X_tr[val_st:val_end]
+        x_tr_cut = np.concatenate((X_tr[r_idxs[:val_st]], X_tr[r_idxs[val_end:]]))
+        y_tr_cut = np.concatenate((y_tr[r_idxs[:val_st]], y_tr[r_idxs[val_end:]]))
+
+        n_tr = len(x_tr_cut)
+        while True:
+            for i in range(0, n_tr, batch_size):
+                X_batch = x_tr_cut[i:i + batch_size]
+                y_batch = y_tr_cut[i:i + batch_size]
+                yield X_batch, y_batch
+
+
+def batch_gen(x_tr, y_tr, batch_size=32):
+    n_tr = len(x_tr)
+    while True:
+        for i in range(0, n_tr, batch_size):
+            X_batch = x_tr[i:i + batch_size]
+            y_batch = y_tr[i:i + batch_size]
+            yield X_batch, y_batch
+
 def load_fasttext_embeddings_lim(embeddings_path, word_index, max_features=100000):
     embeddings_index = {}
     missing = set()

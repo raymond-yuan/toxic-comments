@@ -26,17 +26,18 @@ def get_LSTM_model():
 
     return model
 
-def get_GRU_model(embedding_matrix):
+def get_GRU_model(embedding_matrix, max_features):
     # embed_size = 128
-    inp = Input(shape=(maxlen, ))
+    inp = Input(shape=(None, ))
     x = Embedding(max_features, embed_size, weights=[embedding_matrix], trainable=True)(inp)
-    x = Bidirectional(GRU(128, return_sequences=True, dropout=0.25, recurrent_dropout=0.25))(x)
+    x = Bidirectional(GRU(64, return_sequences=True, dropout=0.25, recurrent_dropout=0.25))(x)
+    x = Bidirectional(GRU(64, return_sequences=True, dropout=0.25, recurrent_dropout=0.25))(x)
     x = GlobalMaxPool1D()(x)
-    x = Dropout(0.5)(x)
-    x = Dense(128)(x)
+    # x = Dropout(0.1)(x)
+    x = Dense(32)(x)
     x = BatchNormalization()(x)
     x = Activation('relu')(x)
-    x = Dropout(0.5)(x)
+    x = Dropout(0.1)(x)
     x = Dense(6, activation="sigmoid")(x)
     model = Model(inputs=inp, outputs=x)
 
@@ -47,7 +48,7 @@ def get_GRU_model(embedding_matrix):
 
     return model
 
-def get_GRU_Max_model(embedding_matrix):
+def get_GRU_Max_model(embedding_matrix, max_features):
     # embed_size = 128
     inp = Input(shape=(maxlen, ))
     x = Embedding(max_features, embed_size, weights=[embedding_matrix])(inp)
@@ -56,26 +57,6 @@ def get_GRU_Max_model(embedding_matrix):
     x = Dropout(0.25)(x)
     x = MaxoutDense(256, nb_feature=3)(x)
     x = Dropout(0.25)(x)
-    x = Dense(6, activation="sigmoid")(x)
-    model = Model(inputs=inp, outputs=x)
-    model.compile(loss='binary_crossentropy',
-                  optimizer='adam',
-                  metrics=['accuracy'])
-
-    return model
-
-def get_GRU_Max_model(embedding_matrix):
-    # embed_size = 128
-    inp = Input(shape=(maxlen, ))
-    x = Embedding(max_features, embed_size, weights=[embedding_matrix])(inp)
-    x = Bidirectional(GRU(50, return_sequences=True, dropout=0.1, recurrent_dropout=0.1))(x)
-    x = GlobalMaxPool1D()(x)
-    max_in = Dropout(0.1)(x)
-    max_1 = Dense(256)(max_in)
-    max_1 = Dense(256)(max_in)
-
-    x = Dense(256, activation="relu")(x)
-    x = Dropout(0.1)(x)
     x = Dense(6, activation="sigmoid")(x)
     model = Model(inputs=inp, outputs=x)
     model.compile(loss='binary_crossentropy',
