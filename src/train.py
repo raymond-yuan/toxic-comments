@@ -34,35 +34,20 @@ class Pipeline(object):
         print('TYPE', self.y_tr.shape)
 
         for a in data_augmentors:
-            tr = pd.read_csv(a)
+            tr = pd.read_csv('../data/' + a)
             add_on_tr = tr["comment_text"].fillna("__na__").values
             add_on_y = tr[self.list_classes].values
             len_add_on_tr, len_add_on_y = len(add_on_tr), len(add_on_y)
-            assert len_add_on_tr == len_add_on_y, 'Length of train and y not matched!'
+            assert len_add_on_tr == len_add_on_y and len_add_on_tr != 0, 'Length of train and y not matched!'
 
             r_idxs = np.random.permutation(len_add_on_tr)
 
             list_sentences_train = np.concatenate((list_sentences_train, add_on_tr[r_idxs[:int(0.5 * len_add_on_tr)]]))
             self.y_tr = np.concatenate((self.y_tr, add_on_y[r_idxs[:int(0.5 * len_add_on_y)]]))
-        raise ValueError('temp')
-# embeddings_index = dict(get_coefs(*o.strip().split()) for o in open(EMBEDDING_FILE))
-# embeddings_index = dict(get_coefs(*o.rstrip().rsplit()) for o in codecs.open(EMBEDDING_FILE, encoding='utf-8')
-# embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index)
-embedding_matrix = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE,
-                                                      tokenizer.word_index,
-                                                      max_features=max_features)
-embedding_file_name = 'fasttextLoader.' + EMBEDDING_FILE + '.ft-{}.npz'.format(max_features)
-if os.path.exists(embedding_file_name):
-    embedding_matrix = np.load(embedding_file_name)['embed_mat']
-else:
-    print('Generating embeddings')
-    # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index, max_features=max_features)
-    embedding_matrix, missing_idx = utils.load_fasttext_embeddings(EMBEDDING_FILE, tokenizer.word_index)
-    np.savez(embedding_file_name, embed_mat=embedding_matrix)
 
         # Standard preprocessing
         tokenizer = text.Tokenizer()
-        self.max_features = len(tokenizer.word_index)
+
         tokenizer.fit_on_texts(list(list_sentences_train))
         list_tokenized_train = tokenizer.texts_to_sequences(list_sentences_train)
         list_tokenized_test = tokenizer.texts_to_sequences(list_sentences_test)
@@ -72,14 +57,36 @@ else:
 
         self.ensemble = pd.read_csv("../data/sample_submission.csv")
         self.ensemble[self.list_classes] = np.zeros((self.X_te.shape[0], len(self.list_classes)))
+        self.max_features = len(tokenizer.word_index)
 
 
         # embeddings_index = dict(get_coefs(*o.strip().split()) for o in open(EMBEDDING_FILE))
         # embeddings_index = dict(get_coefs(*o.rstrip().rsplit()) for o in codecs.open(EMBEDDING_FILE, encoding='utf-8')
         # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index)
-        self.embedding_matrix = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE,
-                                                              tokenizer.word_index,
-                                                              max_features=max_features)
+        # self.embedding_matrix = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE,
+        #                                                       tokenizer.word_index,
+        #                                                       max_features=max_features)
+
+        # embeddings_index = dict(get_coefs(*o.strip().split()) for o in open(EMBEDDING_FILE))
+        # embeddings_index = dict(get_coefs(*o.rstrip().rsplit()) for o in codecs.open(EMBEDDING_FILE, encoding='utf-8')
+        # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index)
+
+        embedding_file_name = embedding_type + '.' + EMBEDDING_FILE + '.ft-{}.npz'.format(self.max_features)
+        if os.path.exists(embedding_file_name):
+            print('Loading embeddings')
+            embedding_matrix = np.load(embedding_file_name)['embed_mat']
+        else:
+            print('Generating embeddings')
+            if embedding_type == 'fasttextLim':
+                # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index, max_features=max_features)
+                embedding_matrix, missing_idx = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE, tokenizer.word_index, self.max_features)
+            elif embedding_type == 'fasttext':
+                embedding_matrix, missing_idx = utils.load_fasttext_embeddings(EMBEDDING_FILE, tokenizer.word_index)
+            elif embedding_type == 'word2vec':
+                embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index, self.max_features)
+            else:
+                raise ValueError('Embedding type Unknown.')
+            np.savez(embedding_file_name, embed_mat=embedding_matrix)
 
         if not os.path.exists(MODEL_DIR):
             # os.makedirs(MODEL_DIR, mode=0o777)
@@ -197,6 +204,3 @@ else:
 if __name__ == '__main__':
     pipeline = Pipeline()
     # pipeline.train()
-
-
-

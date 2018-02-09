@@ -54,7 +54,7 @@ def load_fasttext_embeddings_lim(embeddings_path, word_index, max_features=10000
     print('number of null word embeddings: {}'.format(np.sum(
                                     np.sum(embedding_matrix, axis=1) == 0)))
     print('Number of missing words: {}'.format(len(missing)))
-    return embedding_matrix
+    return embedding_matrix, missing
 
 def load_w2v_embeddings(embeddings_path, word_index, max_features=100000):
     extension = os.path.splitext(embeddings_path)[1]
