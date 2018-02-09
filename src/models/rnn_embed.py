@@ -26,19 +26,18 @@ def get_LSTM_model():
 
     return model
 
-def get_GRU_model(embedding_matrix):
-    print('GRU')
+def get_GRU_model(embedding_matrix, max_features):
+    # embed_size = 128
     inp = Input(shape=(None, ))
-    x = Embedding(max_features, embed_size, weights=[embedding_matrix], trainable=False)(inp)
+    x = Embedding(max_features, embed_size, weights=[embedding_matrix], trainable=True)(inp)
     x = Bidirectional(GRU(64, return_sequences=True, dropout=0.25, recurrent_dropout=0.25))(x)
     x = Bidirectional(GRU(64, return_sequences=True, dropout=0.25, recurrent_dropout=0.25))(x)
-
     x = GlobalMaxPool1D()(x)
-    x = Dropout(0.5)(x)
-    x = Dense(50)(x)
+    # x = Dropout(0.1)(x)
+    x = Dense(32)(x)
     x = BatchNormalization()(x)
     x = Activation('relu')(x)
-    x = Dropout(0.5)(x)
+    x = Dropout(0.1)(x)
     x = Dense(6, activation="sigmoid")(x)
     model = Model(inputs=inp, outputs=x)
 
@@ -49,7 +48,7 @@ def get_GRU_model(embedding_matrix):
 
     return model
 
-def get_GRU_Max_model(embedding_matrix):
+def get_GRU_Max_model(embedding_matrix, max_features):
     # embed_size = 128
     inp = Input(shape=(maxlen, ))
     x = Embedding(max_features, embed_size, weights=[embedding_matrix])(inp)
