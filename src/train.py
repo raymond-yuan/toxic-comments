@@ -22,6 +22,8 @@ from models.rnn_embed import *
 class Pipeline(object):
     def __init__(self, data_augmentors=["train_fr.csv", "train_es.csv", "train_de.csv"]):
         # Load the data
+        np.random.seed(seed=0)
+
         train = pd.read_csv(TRAIN_DATA_FILE)
         test = pd.read_csv(TEST_DATA_FILE)
         train = train.sample(frac=1)
@@ -30,8 +32,6 @@ class Pipeline(object):
         self.list_classes = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
         self.y_tr = train[self.list_classes].values
         list_sentences_test = test["comment_text"].fillna("__na__").values
-
-        print('TYPE', self.y_tr.shape)
 
         for a in data_augmentors:
             tr = pd.read_csv('../data/' + a)
@@ -44,6 +44,8 @@ class Pipeline(object):
 
             list_sentences_train = np.concatenate((list_sentences_train, add_on_tr[r_idxs[:int(0.5 * len_add_on_tr)]]))
             self.y_tr = np.concatenate((self.y_tr, add_on_y[r_idxs[:int(0.5 * len_add_on_y)]]))
+
+        print('TYPE', self.y_tr.shape)
 
         # Standard preprocessing
         tokenizer = text.Tokenizer()
@@ -71,7 +73,9 @@ class Pipeline(object):
         # embeddings_index = dict(get_coefs(*o.rstrip().rsplit()) for o in codecs.open(EMBEDDING_FILE, encoding='utf-8')
         # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index)
 
-        embedding_file_name = embedding_type + '.' + EMBEDDING_FILE + '.ft-{}.npz'.format(self.max_features)
+        embedding_file_name = EMBEDDING_FILE + '.{}-{}.npz'.format(embedding_type, self.max_features)
+        print('Embedding file name', embedding_file_name)
+
         if os.path.exists(embedding_file_name):
             print('Loading embeddings')
             embedding_matrix = np.load(embedding_file_name)['embed_mat']
@@ -87,6 +91,7 @@ class Pipeline(object):
             else:
                 raise ValueError('Embedding type Unknown.')
             np.savez(embedding_file_name, embed_mat=embedding_matrix)
+        self.embedding_matrix = embedding_matrix
 
         if not os.path.exists(MODEL_DIR):
             # os.makedirs(MODEL_DIR, mode=0o777)
@@ -98,14 +103,14 @@ class Pipeline(object):
 
     def load_model(self):
         if model_name == 'GRU_Ensemble':
-            model = get_GRU_model(embedding_matrix, self.max_features)
+            model = get_GRU_model(self.embedding_matrix, self.max_features)
         elif model_name == 'GRU_MaxEnsemble':
-            model = get_GRU_Max_model(embedding_matrix, self.max_features)
+            model = get_GRU_Max_model(self.embedding_matrix, self.max_features)
         elif model_name == 'LSTM_baseline':
             model = get_LSTM_model()
         else:
             raise NotImplementedError('Unknown model config')
-        raise model
+        return model
 
     def train(self):
         n_examples = len(self.X_tr)
@@ -203,4 +208,4 @@ class Pipeline(object):
 #     ensemble.to_csv(MODEL_DIR + "ensemble_{}_.csv".format(model_name), index=False)
 if __name__ == '__main__':
     pipeline = Pipeline()
-    # pipeline.train()
+    pipeline.train()
