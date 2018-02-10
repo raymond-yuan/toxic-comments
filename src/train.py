@@ -127,6 +127,7 @@ class Pipeline(object):
             # Build model architecture
             model = self.load_model()
             self.file_path = MODEL_DIR + "weights_{}.best.{}.hdf5".format(model_name, val_idx)
+            print(model.summary())
             checkpoint = ModelCheckpoint(file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
             early = EarlyStopping(monitor="val_loss", mode="min", patience=20)
             self.callbacks_list = [checkpoint, early]  # early
