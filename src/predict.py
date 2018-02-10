@@ -53,6 +53,4 @@ if __name__ == '__main__':
     sample_submission = pd.read_csv("../data/sample_submission.csv")
 
     sample_submission[list_classes] = y_test
-    ensemble[list_classes] += y_test
-
     sample_submission.to_csv(model_dir + "{}_{}.csv".format(model_name, 0), index=False)
