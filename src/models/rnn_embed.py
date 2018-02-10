@@ -4,7 +4,7 @@
 
 from keras.models import Model
 from keras.layers import Dense, Embedding, Input, MaxoutDense, Activation, BatchNormalization
-from keras.layers import LSTM, GRU, Bidirectional, GlobalMaxPool1D, Dropout
+from keras.layers import LSTM, GRU, Bidirectional, GlobalMaxPool1D, Dropout, CuDNNGRU
 from keras import optimizers
 
 from config import *
@@ -29,9 +29,11 @@ def get_LSTM_model():
 def get_GRU_model(embedding_matrix, max_features):
     # embed_size = 128
     inp = Input(shape=(None, ))
-    x = Embedding(max_features, embed_size, weights=[embedding_matrix], trainable=False)(inp)
-    x = Bidirectional(GRU(64, return_sequences=True, dropout=0.25, recurrent_dropout=0.25))(x)
-    x = Bidirectional(GRU(64, return_sequences=True, dropout=0.25, recurrent_dropout=0.25))(x)
+    x = Embedding(len(embedding_matrix), embed_size, weights=[embedding_matrix], trainable=False)(inp)
+    x = Bidirectional(CuDNNGRU(64, return_sequences=True))(x)
+    x = Dropout(0.25)(x)
+    x = Bidirectional(CuDNNGRU(64, return_sequences=True))(x)
+
     x = GlobalMaxPool1D()(x)
     # x = Dropout(0.1)(x)
     x = Dense(32)(x)
