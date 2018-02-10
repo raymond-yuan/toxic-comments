@@ -117,7 +117,7 @@ class Pipeline(object):
         r_idxs = np.random.permutation(n_examples)
         n_splits = 10
         splits = int((1 / n_splits) * n_examples)
-        for val_idx in range(n_splits):
+        for val_idx in range(1, n_splits):
             val_st, val_end = val_idx * splits, val_idx * splits + splits
             x_val = self.X_tr[r_idxs[val_st:val_end]]
             y_val = self.y_tr[r_idxs[val_st:val_end]]
@@ -128,7 +128,7 @@ class Pipeline(object):
             model = self.load_model()
             self.file_path = MODEL_DIR + "weights_{}.best.{}.hdf5".format(model_name, val_idx)
             print(model.summary())
-            checkpoint = ModelCheckpoint(file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+            checkpoint = ModelCheckpoint(self.file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
             early = EarlyStopping(monitor="val_loss", mode="min", patience=20)
             self.callbacks_list = [checkpoint, early]  # early
 
