@@ -30,16 +30,15 @@ def get_GRU_model(embedding_matrix, max_features):
     # embed_size = 128
     inp = Input(shape=(None, ))
     x = Embedding(len(embedding_matrix), embed_size, weights=[embedding_matrix], trainable=False)(inp)
-    x = Bidirectional(CuDNNGRU(64, return_sequences=True))(x)
+    x = Bidirectional(CuDNNGRU(32, return_sequences=True))(x)
     x = Dropout(0.25)(x)
-    x = Bidirectional(CuDNNGRU(64, return_sequences=True))(x)
-
-    x = GlobalMaxPool1D()(x)
-    # x = Dropout(0.1)(x)
-    x = Dense(32)(x)
+    x = Bidirectional(CuDNNGRU(32, return_sequences=False))(x)
+    # x = Dropout(0.15)(x)
+    # x = GlobalMaxPool1D()(x)
+    x = Dense(64)(x)
     x = BatchNormalization()(x)
     x = Activation('relu')(x)
-    x = Dropout(0.1)(x)
+    # x = Dropout(0.1)(x)
     x = Dense(6, activation="sigmoid")(x)
     model = Model(inputs=inp, outputs=x)
 

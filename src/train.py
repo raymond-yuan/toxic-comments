@@ -20,7 +20,7 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint
 from models.rnn_embed import *
 
 class Pipeline(object):
-    def __init__(self, data_augmentors=["train_fr.csv", "train_es.csv", "train_de.csv"]):
+    def __init__(self):
         # Load the data
         np.random.seed(seed=0)
 
@@ -38,12 +38,14 @@ class Pipeline(object):
             add_on_tr = tr["comment_text"].fillna("__na__").values
             add_on_y = tr[self.list_classes].values
             len_add_on_tr, len_add_on_y = len(add_on_tr), len(add_on_y)
-            assert len_add_on_tr == len_add_on_y and len_add_on_tr != 0, 'Length of train and y not matched!'
+            # assert len_add_on_tr == len(list_sentences_train) and len_add_on_tr != 0, 'Length of train and y not matched!'
 
-            r_idxs = np.random.permutation(len_add_on_tr)
+            ps = np.random.random(len(list_sentences_train))
+            list_sentences_train = np.where(ps > 0.25, list_sentences_train, add_on_tr)
 
-            list_sentences_train = np.concatenate((list_sentences_train, add_on_tr[r_idxs[:int(0.5 * len_add_on_tr)]]))
-            self.y_tr = np.concatenate((self.y_tr, add_on_y[r_idxs[:int(0.5 * len_add_on_y)]]))
+            # r_idxs = np.random.permutation(len_add_on_tr)
+            # list_sentences_train = np.concatenate((list_sentences_train, add_on_tr[r_idxs[:int(0.3 * len_add_on_tr)]]))
+            # self.y_tr = np.concatenate((self.y_tr, add_on_y[r_idxs[:int(0.3 * len_add_on_y)]]))
 
         print('TYPE', self.y_tr.shape)
 
@@ -74,6 +76,8 @@ class Pipeline(object):
         # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index)
 
         embedding_file_name = EMBEDDING_FILE + '.{}-{}.npz'.format(embedding_type, self.max_features)
+        # embedding_file_name = '/home/raymond/Documents/projects/toxic-comments/data/wiki.en.bin.fasttext-237978.npz'
+        # embedding_file_name = '/home/raymond/Documents/projects/toxic-comments/data/wiki.en.vec.fasttextLim-237978.npz'
         print('Embedding file name', embedding_file_name)
 
         if os.path.exists(embedding_file_name):
@@ -117,7 +121,7 @@ class Pipeline(object):
         r_idxs = np.random.permutation(n_examples)
         n_splits = 10
         splits = int((1 / n_splits) * n_examples)
-        for val_idx in range(1, n_splits):
+        for val_idx in range(n_splits):
             val_st, val_end = val_idx * splits, val_idx * splits + splits
             x_val = self.X_tr[r_idxs[val_st:val_end]]
             y_val = self.y_tr[r_idxs[val_st:val_end]]
@@ -130,8 +134,10 @@ class Pipeline(object):
             print(model.summary())
             checkpoint = ModelCheckpoint(self.file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
             early = EarlyStopping(monitor="val_loss", mode="min", patience=20)
-            self.callbacks_list = [checkpoint, early]  # early
+            best_roc = MODEL_DIR + 'ROCAUC-{}.hdf5'.format(val_idx)
+            # ival = utils.IntervalEvaluation(best_roc, validation_data=(x_val, y_val), interval=1)
 
+            self.callbacks_list = [checkpoint, early]
             fit = model.fit_generator(utils.batch_gen(x_tr_cut, y_tr_cut, batch_size=batch_size),
                                       epochs=epochs,
                                       validation_data=utils.batch_gen(x_val, y_val, batch_size=batch_size),
@@ -153,12 +159,12 @@ class Pipeline(object):
             sample_submission[self.list_classes] = y_test
             self.ensemble[self.list_classes] += y_test
 
-            sample_submission.to_csv(MODEL_DIR + "{}_{}.csv".format(model_name, i), index=False)
+            sample_submission.to_csv(MODEL_DIR + "{}_{}.csv".format(model_name, val_idx), index=False)
 
             K.clear_session()
 
         self.ensemble[self.list_classes] /= float(n_splits)
-        ensemble.to_csv(MODEL_DIR + "ensemble_{}_.csv".format(model_name), index=False)
+        self.ensemble.to_csv(MODEL_DIR + "ensemble_{}_.csv".format(model_name), index=False)
 
 #
 # if ensemble_num < 1: raise ValueError('No models run')

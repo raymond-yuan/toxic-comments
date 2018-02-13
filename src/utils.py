@@ -3,6 +3,32 @@ import numpy as np
 from gensim.models import KeyedVectors, FastText
 import os, codecs
 from config import *
+import logging
+
+from sklearn.metrics import roc_auc_score
+from keras.callbacks import Callback
+
+
+class IntervalEvaluation(Callback):
+    def __init__(self, filepath, validation_data=(), interval=1):
+        super(Callback, self).__init__()
+        self.filepath = filepath
+        self.interval = interval
+        self.X_val, self.y_val = validation_data
+        self.best = -np.Inf
+
+    def on_epoch_end(self, epoch, logs={}):
+        if epoch % self.interval == 0:
+            y_pred = self.model.predict(self.X_val, verbose=0)
+            score = roc_auc_score(self.y_val, y_pred)
+            logging.info("interval evaluation - epoch: {:d} - score: {:.6f}".format(epoch, score))
+            if score > self.best:
+                print('Epoch {}: ROC AUC improved from {} to {}. Saving model to {}'.format(
+                            epoch + 1, self.best, score, self.filepath))
+                self.best = score
+                self.model.save(self.filepath, overwrite=True)
+
+
 
 def build_generator(X_tr, y_tr, batch_size):
     n_examples = len(X_tr)
