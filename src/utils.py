@@ -1,8 +1,24 @@
 from tqdm import tqdm
 import numpy as np
+import pandas as pd
 from gensim.models import KeyedVectors, FastText
 import os, codecs
 from config import *
+
+def ensembler(file_dir):
+    count = 0
+    label_cols = ['toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate']
+    ensemble = pd.read_csv("../data/sample_submission.csv")
+    ensemble[label_cols] -= ensemble[label_cols]
+    for file in os.listdir(file_dir):
+        if file.endswith(".csv"):
+            count += 1
+            print(file)
+            p_s = pd.read_csv(file_dir + file)
+            ensemble[label_cols] += p_s[label_cols]
+    ensemble[label_cols] /= count
+    ensemble.to_csv(file_dir + "ensemble_{}_.csv".format('ensemble'), index=False)
+
 
 def build_generator(X_tr, y_tr, batch_size):
     n_examples = len(X_tr)
@@ -107,8 +123,9 @@ def ensemble_submissions(in_list):
     return sum(np.array(in_list)) / float(len(in_list))
 
 if __name__ == '__main__':
-    with open(word_idex_path, 'rb') as word_index_file:
-        word_index = pkl.load(word_index_file)
-
-    embeddings_mat, missing = load_fasttext_embeddings(EMBEDDING_FILE, word_index)
-    save_embeddings(embeddings_mat, missing)
+    ensembler('/Users/raymondyuan/Documents/projects/toxic-comments/data/fasttext-wiki.en.bin-GRU_Ensemble-2018-02-10-05:17:16.741376/')
+    # with open(word_idex_path, 'rb') as word_index_file:
+    #     word_index = pkl.load(word_index_file)
+    #
+    # embeddings_mat, missing = load_fasttext_embeddings(EMBEDDING_FILE, word_index)
+    # save_embeddings(embeddings_mat, missing)
