@@ -28,6 +28,8 @@ class IntervalEvaluation(Callback):
                             epoch + 1, self.best, score, self.filepath))
                 self.best = score
                 self.model.save(self.filepath, overwrite=True)
+            else:
+                print('Epoch {}: ROC AUC did not improve ({})'.format(epoch, score))
 
 
 
@@ -93,6 +95,7 @@ def load_fasttext_embeddings_lim(embeddings_path, word_index, max_features=10000
         else:
             missing.add(word)
     print('total number of words in word index: {}'.format(len(word_index)))
+    print('Len of embedding matrix: {}'.format(len(embedding_matrix)))
     print('number of null word embeddings: {}'.format(np.sum(
                                     np.sum(embedding_matrix, axis=1) == 0)))
     print('Number of missing words: {}'.format(len(missing)))

@@ -6,8 +6,9 @@ import numpy as np
 
 
 if __name__ == '__main__':
-    model_dir = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-09 03:33:10.944718/'
-    weights = 'weights_GRU_Ensemble.best.0.hdf5'
+    model_dir = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-12-21:32:00.029062/'
+
+    weights = 'ROCAUC-0.hdf5'
 
     np.random.seed(seed=0)
 
@@ -19,7 +20,6 @@ if __name__ == '__main__':
     list_classes = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
     y_tr = train[list_classes].values
     list_sentences_test = test["comment_text"].fillna("__na__").values
-    data_augmentors=["train_fr.csv", "train_es.csv", "train_de.csv"]
     for a in data_augmentors:
         tr = pd.read_csv('../data/' + a)
         add_on_tr = tr["comment_text"].fillna("__na__").values
@@ -53,4 +53,4 @@ if __name__ == '__main__':
     sample_submission = pd.read_csv("../data/sample_submission.csv")
 
     sample_submission[list_classes] = y_test
-    sample_submission.to_csv(model_dir + "{}_{}.csv".format(model_name, 0), index=False)
+    sample_submission.to_csv(model_dir + "{}_{}.csv".format(model_name, 'predict'), index=False)
