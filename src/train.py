@@ -8,6 +8,7 @@ import keras.backend as K
 import os, codecs
 from config import *
 from tqdm import tqdm
+import pickle
 
 # Input data files are available in the "../data/" directory.
 # For example, running this (by clicking run or pressing Shift+Enter) will list the files in the input directory
@@ -84,13 +85,16 @@ class Pipeline(object):
             embedding_matrix = np.load(embedding_file_name)['embed_mat']
         else:
             print('Generating embeddings')
+            wi = tokenizer.word_index
+            with open(embedding_file_name + '.pkl', 'wb') as f:
+                pickle.dump(wi, f, pickle.HIGHEST_PROTOCOL)
             if embedding_type == 'fasttextLim':
                 # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index, max_features=max_features)
-                embedding_matrix, missing_idx = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE, tokenizer.word_index, self.max_features)
+                embedding_matrix, missing_idx = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE, wi, self.max_features)
             elif embedding_type == 'fasttext':
-                embedding_matrix, missing_idx = utils.load_fasttext_embeddings(EMBEDDING_FILE, tokenizer.word_index)
+                embedding_matrix, missing_idx = utils.load_fasttext_embeddings(EMBEDDING_FILE, wi)
             elif embedding_type == 'word2vec':
-                embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index, self.max_features)
+                embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, wi, self.max_features)
             else:
                 raise ValueError('Embedding type Unknown.')
             np.savez(embedding_file_name, embed_mat=embedding_matrix)
