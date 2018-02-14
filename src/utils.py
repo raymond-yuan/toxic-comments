@@ -8,6 +8,7 @@ import logging
 
 from sklearn.metrics import roc_auc_score
 from keras.callbacks import Callback
+from keras.preprocessing import sequence
 
 
 class IntervalEvaluation(Callback):
@@ -17,10 +18,22 @@ class IntervalEvaluation(Callback):
         self.interval = interval
         self.X_val, self.y_val = validation_data
         self.best = -np.Inf
+        self.n = self.X_val.shape[0]
+        self.steps = self.n // batch_size if self.n % batch_size == 0 else self.n // batch_size + 1
 
     def on_epoch_end(self, epoch, logs={}):
         if epoch % self.interval == 0:
-            y_pred = self.model.predict(self.X_val, verbose=0)
+            if pad_batches:
+
+                y_pred = self.model.predict_generator(
+                                    batch_gen(self.X_val,
+                                        np.zeros((self.n, 6))
+                                     ),
+                                     steps=self.steps,
+                                     verbose=1
+                        )
+            else:
+                y_pred = self.model.predict(self.X_val, verbose=1)
             score = roc_auc_score(self.y_val, y_pred)
             print("interval evaluation - epoch: {:d} - score: {:.6f}".format(epoch, score))
             if score > self.best:
@@ -73,6 +86,8 @@ def batch_gen(x_tr, y_tr, batch_size=32):
         for i in range(0, n_tr, batch_size):
             X_batch = x_tr[i:i + batch_size]
             y_batch = y_tr[i:i + batch_size]
+            if pad_batches:
+                X_batch = sequence.pad_sequences(X_batch, padding='post', truncating='post')
             yield X_batch, y_batch
 
 

@@ -54,11 +54,12 @@ class Pipeline(object):
         tokenizer = text.Tokenizer()
 
         tokenizer.fit_on_texts(list(list_sentences_train))
-        list_tokenized_train = tokenizer.texts_to_sequences(list_sentences_train)
-        list_tokenized_test = tokenizer.texts_to_sequences(list_sentences_test)
-
-        self.X_tr = sequence.pad_sequences(list_tokenized_train, maxlen=maxlen, padding='post', truncating='post')
-        self.X_te = sequence.pad_sequences(list_tokenized_test, maxlen=maxlen, padding='post', truncating='post')
+        if pad_batches:
+            self.X_tr = list_tokenized_train = np.array(tokenizer.texts_to_sequences(list_sentences_train))
+            self.X_te = list_tokenized_test = np.array(tokenizer.texts_to_sequences(list_sentences_test))
+        else:
+            self.X_tr = sequence.pad_sequences(list_tokenized_train, maxlen=maxlen, padding='post', truncating='post')
+            self.X_te = sequence.pad_sequences(list_tokenized_test, maxlen=maxlen, padding='post', truncating='post')
 
         self.ensemble = pd.read_csv("../data/sample_submission.csv")
         self.ensemble[self.list_classes] = np.zeros((self.X_te.shape[0], len(self.list_classes)))
@@ -142,20 +143,27 @@ class Pipeline(object):
             ival = utils.IntervalEvaluation(best_roc, validation_data=(x_val, y_val), interval=1)
 
             self.callbacks_list = [checkpoint, early, ival]
+            spe = x_tr_cut.shape[0] // batch_size if x_tr_cut.shape[0] % batch_size == 0 else x_tr_cut.shape[0] // batch_size + 1
+            spv = x_val.shape[0] // batch_size if x_val.shape[0] % batch_size == 0 else x_val.shape[0] // batch_size + 1
             fit = model.fit_generator(utils.batch_gen(x_tr_cut, y_tr_cut, batch_size=batch_size),
                                       epochs=epochs,
                                       validation_data=utils.batch_gen(x_val, y_val, batch_size=batch_size),
                                       callbacks=self.callbacks_list,
-                                      steps_per_epoch=x_tr_cut.shape[0] // batch_size,
-                                      validation_steps=x_val.shape[0] // batch_size,
-                                      shuffle=True
+                                      steps_per_epoch=spe,
+                                      validation_steps=spv,
+                                      shuffle=False
                                       )
 
             print('Finished training!')
             model.load_weights(best_roc)
 
             print('Performing inference')
-            y_test = model.predict(self.X_te, verbose=1)
+
+            if pad_batches:
+                y_test = model.predict_generator(utils.batch_gen(self.X_te, np.zeros((self.X_te.shape[0], 6))),
+                                                steps=self.X_te.shape[0] // batch_size)
+            else:
+                y_test = model.predict(self.X_te, verbose=1)
 
             print('Generating submission csv')
             sample_submission = pd.read_csv("../data/sample_submission.csv")
