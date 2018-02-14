@@ -23,3 +23,5 @@ batch_size = 128
 epochs = 6
 
 ensemble_num = 1
+
+pad_batches = True 
