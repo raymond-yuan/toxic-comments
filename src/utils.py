@@ -22,14 +22,14 @@ class IntervalEvaluation(Callback):
         if epoch % self.interval == 0:
             y_pred = self.model.predict(self.X_val, verbose=0)
             score = roc_auc_score(self.y_val, y_pred)
-            logging.info("interval evaluation - epoch: {:d} - score: {:.6f}".format(epoch, score))
+            print("interval evaluation - epoch: {:d} - score: {:.6f}".format(epoch, score))
             if score > self.best:
                 print('Epoch {}: ROC AUC improved from {} to {}. Saving model to {}'.format(
                             epoch + 1, self.best, score, self.filepath))
                 self.best = score
                 self.model.save(self.filepath, overwrite=True)
             else:
-                print('Epoch {}: ROC AUC did not improve ({})'.format(epoch, score))
+                print('Epoch {}: ROC AUC did not improve ({})'.format(epoch + 1, score))
 
 
 
@@ -74,6 +74,7 @@ def batch_gen(x_tr, y_tr, batch_size=32):
             X_batch = x_tr[i:i + batch_size]
             y_batch = y_tr[i:i + batch_size]
             yield X_batch, y_batch
+
 
 def load_fasttext_embeddings_lim(embeddings_path, word_index, max_features=100000):
     embeddings_index = {}
@@ -121,6 +122,7 @@ def load_w2v_embeddings(embeddings_path, word_index, max_features=100000):
             missing.add(i)
     print("Loaded", len(embeddings), "Word2vec embeddings with", len(missing), "missing")
     return embeddings, missing
+
 
 def load_fasttext_embeddings(embeddings_path, word_index):
     print("Reading in FastText embeddings from " + embeddings_path)

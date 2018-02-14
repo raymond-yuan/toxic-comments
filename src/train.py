@@ -62,7 +62,8 @@ class Pipeline(object):
 
         self.ensemble = pd.read_csv("../data/sample_submission.csv")
         self.ensemble[self.list_classes] = np.zeros((self.X_te.shape[0], len(self.list_classes)))
-        self.max_features = len(tokenizer.word_index)
+        wi = tokenizer.word_index
+        self.max_features = len(wi)
 
         # embeddings_index = dict(get_coefs(*o.strip().split()) for o in open(EMBEDDING_FILE))
         # embeddings_index = dict(get_coefs(*o.rstrip().rsplit()) for o in codecs.open(EMBEDDING_FILE, encoding='utf-8')
@@ -85,7 +86,6 @@ class Pipeline(object):
             embedding_matrix = np.load(embedding_file_name)['embed_mat']
         else:
             print('Generating embeddings')
-            wi = tokenizer.word_index
             with open(embedding_file_name + '.pkl', 'wb') as f:
                 pickle.dump(wi, f, pickle.HIGHEST_PROTOCOL)
             if embedding_type == 'fasttextLim':
@@ -93,11 +93,12 @@ class Pipeline(object):
                 embedding_matrix, missing_idx = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE, wi, self.max_features)
             elif embedding_type == 'fasttext':
                 embedding_matrix, missing_idx = utils.load_fasttext_embeddings(EMBEDDING_FILE, wi)
+                embedding_matrix = np.concatenate((np.zeros((1, embed_size)), embedding_matrix), axis=0)
             elif embedding_type == 'word2vec':
                 embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, wi, self.max_features)
             else:
                 raise ValueError('Embedding type Unknown.')
-            np.savez(embedding_file_name, embed_mat=embedding_matrix)
+            np.savez(embedding_file_name, embed_mat=embedding_matrix, missing=missing_idx)
         self.embedding_matrix = embedding_matrix
 
         if not os.path.exists(MODEL_DIR):
@@ -147,7 +148,7 @@ class Pipeline(object):
                                       callbacks=self.callbacks_list,
                                       steps_per_epoch=x_tr_cut.shape[0] // batch_size,
                                       validation_steps=x_val.shape[0] // batch_size,
-                                      shuffle=False
+                                      shuffle=True
                                       )
 
             print('Finished training!')
@@ -169,53 +170,6 @@ class Pipeline(object):
         self.ensemble[self.list_classes] /= float(n_splits)
         self.ensemble.to_csv(MODEL_DIR + "ensemble_{}_.csv".format(model_name), index=False)
 
-#
-# if ensemble_num < 1: raise ValueError('No models run')
-# if ensemble_num > 1:
-#     ensemble = pd.read_csv("../data/sample_submission.csv")
-#     ensemble[list_classes] = np.zeros((X_te.shape[0], len(list_classes)))
-#
-#
-#
-# for i in range(ensemble_num):
-#
-#     # Build model architecture
-#     if model_name == 'GRU_Ensemble':
-#         model = get_GRU_model(embedding_matrix)
-#     elif model_name == 'GRU_MaxEnsemble':
-#         model = get_GRU_Max_model(embedding_matrix)
-#     elif model_name == 'LSTM_baseline':
-#         model = get_LSTM_model()
-#     else:
-#         raise NotImplementedError('Unknown model config')
-#     print('Using {} model type'.format(model_name))
-#
-#     file_path = MODEL_DIR + "weights_{}.best.{}.hdf5".format(model_name, i)
-#     checkpoint = ModelCheckpoint(file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-#
-#     early = EarlyStopping(monitor="val_loss", mode="min", patience=20)
-#
-#
-#     callbacks_list = [checkpoint, early] #early
-#     model.fit(X_t, y, batch_size=batch_size, epochs=epochs, validation_split=0.1, callbacks=callbacks_list)
-#     print('Finished training!')
-#     model.load_weights(file_path)
-#
-#     print('Performing inference')
-#     y_test = model.predict(X_te, verbose=1)
-#
-#     print('Generating submission csv')
-#     sample_submission = pd.read_csv("../data/sample_submission.csv")
-#
-#     sample_submission[list_classes] = y_test
-#
-#     if ensemble_num > 1: ensemble[list_classes] += y_test
-#
-#     sample_submission.to_csv(MODEL_DIR + "{}_{}.csv".format(model_name, i), index=False)
-#
-# if ensemble_num > 1:
-#     ensemble[list_classes] /= float(ensemble_num)
-#     ensemble.to_csv(MODEL_DIR + "ensemble_{}_.csv".format(model_name), index=False)
 if __name__ == '__main__':
     pipeline = Pipeline()
     pipeline.train()
