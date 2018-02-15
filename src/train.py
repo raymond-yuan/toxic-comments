@@ -6,6 +6,7 @@ import numpy as np  # linear algebra
 import pandas as pd  # data processing, CSV file I/O (e.g. pd.read_csv)
 import keras.backend as K
 import os, codecs
+import math
 from config import *
 from tqdm import tqdm
 import pickle
@@ -55,11 +56,13 @@ class Pipeline(object):
 
         tokenizer.fit_on_texts(list(list_sentences_train))
         if pad_batches:
-            self.X_tr = list_tokenized_train = np.array(tokenizer.texts_to_sequences(list_sentences_train))
-            self.X_te = list_tokenized_test = np.array(tokenizer.texts_to_sequences(list_sentences_test))
+            self.X_tr  = np.array(tokenizer.texts_to_sequences(list_sentences_train))
+            self.X_te = np.array(tokenizer.texts_to_sequences(list_sentences_test))
         else:
-            self.X_tr = sequence.pad_sequences(list_tokenized_train, maxlen=maxlen, padding='post', truncating='post')
-            self.X_te = sequence.pad_sequences(list_tokenized_test, maxlen=maxlen, padding='post', truncating='post')
+            list_tokenized_train = tokenizer.texts_to_sequences(list_sentences_train)
+            list_tokenized_test = tokenizer.texts_to_sequences(list_sentences_test)
+            self.X_tr = sequence.pad_sequences(list_tokenized_train, padding='post', truncating='post', maxlen=maxlen)
+            self.X_te = sequence.pad_sequences(list_tokenized_test, padding='post', truncating='post', maxlen=maxlen)
 
         self.ensemble = pd.read_csv("../data/sample_submission.csv")
         self.ensemble[self.list_classes] = np.zeros((self.X_te.shape[0], len(self.list_classes)))
@@ -85,6 +88,7 @@ class Pipeline(object):
         if os.path.exists(embedding_file_name):
             print('Loading embeddings')
             embedding_matrix = np.load(embedding_file_name)['embed_mat']
+            missing = np.load(embedding_file_name)['missing'].reshape(1)[0]
         else:
             print('Generating embeddings')
             with open(embedding_file_name + '.pkl', 'wb') as f:
@@ -94,13 +98,14 @@ class Pipeline(object):
                 embedding_matrix, missing_idx = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE, wi, self.max_features)
             elif embedding_type == 'fasttext':
                 embedding_matrix, missing_idx = utils.load_fasttext_embeddings(EMBEDDING_FILE, wi)
-                embedding_matrix = np.concatenate((np.zeros((1, embed_size)), embedding_matrix), axis=0)
+                # embedding_matrix = np.concatenate((np.zeros((1, embed_size)), embedding_matrix), axis=0)
             elif embedding_type == 'word2vec':
                 embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, wi, self.max_features)
             else:
                 raise ValueError('Embedding type Unknown.')
             np.savez(embedding_file_name, embed_mat=embedding_matrix, missing=missing_idx)
         self.embedding_matrix = embedding_matrix
+        self.missing = missing
 
         if not os.path.exists(MODEL_DIR):
             # os.makedirs(MODEL_DIR, mode=0o777)
@@ -113,6 +118,8 @@ class Pipeline(object):
     def load_model(self):
         if model_name == 'GRU_Ensemble':
             model = get_GRU_model(self.embedding_matrix, self.max_features)
+        elif model_name == 'GRU_CUDNN':
+            model = get_cudnnGRU_model(self.embedding_matrix, self.max_features)
         elif model_name == 'GRU_MaxEnsemble':
             model = get_GRU_Max_model(self.embedding_matrix, self.max_features)
         elif model_name == 'LSTM_baseline':
@@ -126,7 +133,7 @@ class Pipeline(object):
         r_idxs = np.random.permutation(n_examples)
         n_splits = 10
         splits = int((1 / n_splits) * n_examples)
-        for val_idx in range(n_splits):
+        for val_idx in range(0, n_splits):
             val_st, val_end = val_idx * splits, val_idx * splits + splits
             x_val = self.X_tr[r_idxs[val_st:val_end]]
             y_val = self.y_tr[r_idxs[val_st:val_end]]
@@ -140,18 +147,23 @@ class Pipeline(object):
             checkpoint = ModelCheckpoint(self.file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
             early = EarlyStopping(monitor="val_loss", mode="min", patience=20)
             best_roc = MODEL_DIR + 'ROCAUC-{}.hdf5'.format(val_idx)
-            ival = utils.IntervalEvaluation(best_roc, validation_data=(x_val, y_val), interval=1)
+            ival = utils.IntervalEvaluation(best_roc, self.missing, validation_data=(x_val, y_val), interval=1)
 
-            self.callbacks_list = [checkpoint, early, ival]
-            spe = x_tr_cut.shape[0] // batch_size if x_tr_cut.shape[0] % batch_size == 0 else x_tr_cut.shape[0] // batch_size + 1
-            spv = x_val.shape[0] // batch_size if x_val.shape[0] % batch_size == 0 else x_val.shape[0] // batch_size + 1
-            fit = model.fit_generator(utils.batch_gen(x_tr_cut, y_tr_cut, batch_size=batch_size),
+            self.callbacks_list = [early, checkpoint]
+            spe = math.ceil(x_tr_cut.shape[0] / batch_size)
+            spv = math.ceil(x_val.shape[0] / batch_size)
+            tr_batch_generator = utils.batch_seq(x_tr_cut, y_tr_cut, batch_size, self.missing)
+            val_batch_generator = utils.batch_seq(x_val, y_val, batch_size, self.missing)
+            fit = model.fit_generator(tr_batch_generator,
                                       epochs=epochs,
-                                      validation_data=utils.batch_gen(x_val, y_val, batch_size=batch_size),
+                                      validation_data=val_batch_generator,
                                       callbacks=self.callbacks_list,
-                                      steps_per_epoch=spe,
-                                      validation_steps=spv,
-                                      shuffle=False
+                                      # steps_per_epoch=spe,
+                                      # validation_steps=spv,
+                                      shuffle=False,
+                                      use_multiprocessing=True,
+                                      max_queue_size=18000,
+                                      workers=5
                                       )
 
             print('Finished training!')
@@ -160,8 +172,9 @@ class Pipeline(object):
             print('Performing inference')
 
             if pad_batches:
-                y_test = model.predict_generator(utils.batch_gen(self.X_te, np.zeros((self.X_te.shape[0], 6))),
-                                                steps=self.X_te.shape[0] // batch_size)
+                test_steps = math.ceil(self.X_te.shape[0] / batch_size)
+                test_batch_gen = utils.batch_seq(self.X_te, None, batch_size, self.missing)
+                y_test = model.predict_generator(test_batch_gen)
             else:
                 y_test = model.predict(self.X_te, verbose=1)
 

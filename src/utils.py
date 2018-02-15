@@ -5,37 +5,41 @@ from gensim.models import KeyedVectors, FastText
 import os, codecs
 from config import *
 import logging
+import math
 
 from sklearn.metrics import roc_auc_score
 from keras.callbacks import Callback
 from keras.preprocessing import sequence
+from keras.utils import Sequence
 
 
 class IntervalEvaluation(Callback):
-    def __init__(self, filepath, validation_data=(), interval=1):
+    def __init__(self, filepath, missing, validation_data=(), interval=1):
         super(Callback, self).__init__()
         self.filepath = filepath
+        self.missing = missing
         self.interval = interval
         self.X_val, self.y_val = validation_data
         self.best = -np.Inf
         self.n = self.X_val.shape[0]
-        self.steps = self.n // batch_size if self.n % batch_size == 0 else self.n // batch_size + 1
+        self.steps = math.ceil(self.n / batch_size)
 
     def on_epoch_end(self, epoch, logs={}):
         if epoch % self.interval == 0:
             if pad_batches:
-
+                batch_seq(self.X_val, None, batch_size, self.missing)
                 y_pred = self.model.predict_generator(
                                     batch_gen(self.X_val,
-                                        np.zeros((self.n, 6))
-                                     ),
-                                     steps=self.steps,
-                                     verbose=1
+                                            None,
+                                            batch_size=batch_size
+                                    ),
+                                    steps=self.steps,
+                                    verbose=1
                         )
             else:
                 y_pred = self.model.predict(self.X_val, verbose=1)
             score = roc_auc_score(self.y_val, y_pred)
-            print("interval evaluation - epoch: {:d} - score: {:.6f}".format(epoch, score))
+            print("interval evaluation - epoch: {:d} - score: {:.6f}".format(epoch + 1, score))
             if score > self.best:
                 print('Epoch {}: ROC AUC improved from {} to {}. Saving model to {}'.format(
                             epoch + 1, self.best, score, self.filepath))
@@ -82,13 +86,51 @@ def build_generator(X_tr, y_tr, batch_size):
 
 def batch_gen(x_tr, y_tr, batch_size=32):
     n_tr = len(x_tr)
+    train = y_tr is not None
     while True:
         for i in range(0, n_tr, batch_size):
             X_batch = x_tr[i:i + batch_size]
-            y_batch = y_tr[i:i + batch_size]
             if pad_batches:
                 X_batch = sequence.pad_sequences(X_batch, padding='post', truncating='post')
-            yield X_batch, y_batch
+            if train:
+                y_batch = y_tr[i:i + batch_size]
+                yield X_batch, y_batch
+            else:
+                yield X_batch
+
+def pad_seq(data):
+    # Get lengths of each row of data
+    lens = np.array([len(i) for i in data])
+
+    # Mask of valid places in each row
+    mask = np.arange(lens.max()) < lens[:, None]
+    # Setup output array and put elements from data into masked positions
+    out = np.zeros(mask.shape, dtype=np.int32)
+    out[mask] = np.concatenate(data)
+    return out
+
+class batch_seq(Sequence):
+    def __init__(self, x_set, y_set, batch_size, missing):
+        self.x, self.y = x_set, y_set
+        self.batch_size = batch_size
+        self.train = y_set is not None
+        self.missing = missing
+
+    def __len__(self):
+        return math.ceil(len(self.x) / self.batch_size)
+
+    def __getitem__(self, idx):
+        batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
+
+        if pad_batches:
+            batch_x = [np.array([word for word in sample if word not in self.missing]) for sample in batch_x]
+            # batch_x = sequence.pad_sequences(batch_x, padding='post', truncating='post')
+            batch_x = pad_seq(batch_x)
+        if self.train:
+            batch_y = self.y[idx * self.batch_size:(idx + 1) * self.batch_size]
+            return batch_x, batch_y
+        else:
+            return batch_x
 
 
 def load_fasttext_embeddings_lim(embeddings_path, word_index, max_features=100000):

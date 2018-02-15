@@ -2,13 +2,13 @@ from keras.models import load_model
 from keras.preprocessing import text, sequence
 from config import *
 import pandas as pd
+import utils
 import numpy as np
 
 
 if __name__ == '__main__':
-    model_dir = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-12-21:32:00.029062/'
-
-    weights = 'ROCAUC-0.hdf5'
+    model_dir = '/home/ubuntu/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_Ensemble-2018-02-14-14:59:50.685781/'
+    weights = 'weights_GRU_Ensemble.best.0.hdf5'
 
     np.random.seed(seed=0)
 
@@ -41,13 +41,23 @@ if __name__ == '__main__':
     list_tokenized_train = tokenizer.texts_to_sequences(list_sentences_train)
     list_tokenized_test = tokenizer.texts_to_sequences(list_sentences_test)
 
-    X_tr = sequence.pad_sequences(list_tokenized_train, maxlen=maxlen)
-    X_te = sequence.pad_sequences(list_tokenized_test, maxlen=maxlen)
+    if pad_batches:
+        X_tr = list_tokenized_train = np.array(tokenizer.texts_to_sequences(list_sentences_train))
+        X_te = list_tokenized_test = np.array(tokenizer.texts_to_sequences(list_sentences_test))
+    else:
+        X_tr = sequence.pad_sequences(list_tokenized_train, maxlen=maxlen, padding='post', truncating='post')
+        X_te = sequence.pad_sequences(list_tokenized_test, maxlen=maxlen, padding='post', truncating='post')
 
     model = load_model(model_dir + weights)
 
     print('Performing inference')
-    y_test = model.predict(X_te, verbose=1)
+    if pad_batches:
+        test_steps = X_te.shape[0] // batch_size if X_te.shape[0] % batch_size == 0 else X_te.shape[0] // batch_size + 1
+        y_test = model.predict_generator(utils.batch_gen(X_te, None, batch_size=batch_size),
+                                        steps=test_steps,
+                                         verbose=1)
+    else:
+        y_test = model.predict(X_te, verbose=1)
 
     print('Generating submission csv')
     sample_submission = pd.read_csv("../data/sample_submission.csv")
