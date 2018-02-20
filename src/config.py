@@ -10,8 +10,13 @@ embed_type = EMBEDDING_FILE.split('/')[-1]
 
 model_name = 'GRU_Ensemble'
 embedding_type = 'fasttextLim'
-testing = False
+
+load_embed = '/home/raymond/Documents/projects/toxic-comments/data/fasttext-embeddings//home/raymond/Documents/projects/toxic-comments/data/fasttext-embeddings/wiki.en.bin.fasttext-257356.npz'
+
+testing = True
+n_splits = 10
 if testing:
+    n_splits = 1
     MODEL_DIR = "./submissions/{}-{}-{}-{}/".format(embedding_type, embed_type, model_name, 'TEST')
 else:
     MODEL_DIR = "./submissions/{}-{}-{}-{}/".format(embedding_type, embed_type,
@@ -26,7 +31,5 @@ embed_size = 300  # Size of each word vector (default value)
 
 batch_size = 32
 epochs = 7
-
-ensemble_num = 1
 
 pad_batches = True

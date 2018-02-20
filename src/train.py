@@ -10,6 +10,7 @@ import math
 from config import *
 from tqdm import tqdm
 import pickle
+import shutil
 
 # Input data files are available in the "../data/" directory.
 # For example, running this (by clicking run or pressing Shift+Enter) will list the files in the input directory
@@ -86,6 +87,8 @@ class Pipeline(object):
         # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index)
 
         embedding_file_name = EMBEDDING_FILE + '.{}-{}.npz'.format(embedding_type, self.max_features)
+        if load_embed:
+            embedding_file_name = load_embed
         # embedding_file_name = '/home/raymond/Documents/projects/toxic-comments/data/wiki.en.bin.fasttext-237978.npz'
         # embedding_file_name = '/home/raymond/Documents/projects/toxic-comments/data/wiki.en.vec.fasttextLim-237978.npz'
         print('Embedding file name', embedding_file_name)
@@ -136,7 +139,6 @@ class Pipeline(object):
     def train(self):
         n_examples = len(self.X_tr)
         r_idxs = np.random.permutation(n_examples)
-        n_splits = 10
         splits = int((1 / n_splits) * n_examples)
         for val_idx in range(0, n_splits):
             val_st, val_end = val_idx * splits, val_idx * splits + splits
@@ -165,14 +167,14 @@ class Pipeline(object):
                                       callbacks=self.callbacks_list,
                                       # steps_per_epoch=spe,
                                       # validation_steps=spv,
-                                      shuffle=False,
+                                      shuffle=True,
                                       use_multiprocessing=True,
                                       max_queue_size=18000,
                                       workers=5
                                       )
 
             print('Finished training!')
-            model.load_weights(best_roc)
+            model.load_weights(self.file_path)
 
             print('Performing inference')
 
@@ -199,3 +201,5 @@ class Pipeline(object):
 if __name__ == '__main__':
     pipeline = Pipeline()
     pipeline.train()
+    if testing:
+        shutil.rmtree(MODEL_DIR)
