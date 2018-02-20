@@ -8,15 +8,16 @@ EMBEDDING_FILE = "../data/wiki.en.bin"
 
 embed_type = EMBEDDING_FILE.split('/')[-1]
 
-model_name = 'GRU_Ensemble'
+# model_name = 'GRU_Ensemble'
+model_name = 'GRU_CUDNN'
 embedding_type = 'fasttextLim'
 
-load_embed = '/home/raymond/Documents/projects/toxic-comments/data/fasttext-embeddings//home/raymond/Documents/projects/toxic-comments/data/fasttext-embeddings/wiki.en.bin.fasttext-257356.npz'
+load_embed = '/home/raymond/Documents/projects/toxic-comments/data/fasttext-embeddings/wiki.en.bin.fasttext-257356.npz'
 
-testing = True
+testing = False
 n_splits = 10
 if testing:
-    n_splits = 1
+    print('TESTING')
     MODEL_DIR = "./submissions/{}-{}-{}-{}/".format(embedding_type, embed_type, model_name, 'TEST')
 else:
     MODEL_DIR = "./submissions/{}-{}-{}-{}/".format(embedding_type, embed_type,
@@ -29,7 +30,7 @@ data_augmentors = ["train_de.csv", "train_fr.csv", "train_es.csv"]
 maxlen = 500  # max number of words in a comment to use
 embed_size = 300  # Size of each word vector (default value)
 
-batch_size = 32
+batch_size = 16
 epochs = 7
 
 pad_batches = True

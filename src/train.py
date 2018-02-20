@@ -96,7 +96,7 @@ class Pipeline(object):
         if os.path.exists(embedding_file_name):
             print('Loading embeddings')
             embedding_matrix = np.load(embedding_file_name)['embed_mat']
-            missing = np.load(embedding_file_name)['missing'].reshape(1)[0]
+            missing_idx = np.load(embedding_file_name)['missing'].reshape(1)[0]
         else:
             print('Generating embeddings')
             with open(embedding_file_name + '.pkl', 'wb') as f:
@@ -113,7 +113,7 @@ class Pipeline(object):
                 raise ValueError('Embedding type Unknown.')
             np.savez(embedding_file_name, embed_mat=embedding_matrix, missing=missing_idx)
         self.embedding_matrix = embedding_matrix
-        self.missing = missing
+        self.missing = missing_idx
 
         if not os.path.exists(MODEL_DIR):
             # os.makedirs(MODEL_DIR, mode=0o777)

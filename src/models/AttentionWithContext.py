@@ -1,3 +1,9 @@
+from keras.engine.topology import Layer
+import keras.backend as K
+from keras import initializers
+from keras import regularizers
+from keras import constraints
+
 def dot_product(x, kernel):
     """
     Wrapper for dot product operation, in order to be compatible with both

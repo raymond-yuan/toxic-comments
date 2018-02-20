@@ -126,8 +126,8 @@ class batch_seq(Sequence):
 
         if pad_batches:
             batch_x = [np.array([word for word in sample if word not in self.missing]) for sample in batch_x]
-            # batch_x = sequence.pad_sequences(batch_x, padding='post', truncating='post')
-            batch_x = pad_seq(batch_x)
+            batch_x = sequence.pad_sequences(batch_x, padding='post', truncating='post')
+            # batch_x = pad_seq(batch_x)
         if self.train:
             batch_y = self.y[idx * self.batch_size:(idx + 1) * self.batch_size]
             return batch_x, batch_y
