@@ -7,6 +7,7 @@ from keras.layers import Dense, Embedding, Input, MaxoutDense, Activation, Batch
 from keras.layers import LSTM, GRU, Bidirectional, GlobalMaxPool1D, Dropout, CuDNNGRU
 from keras import optimizers
 from models.AttentionWithContext import AttentionWithContext
+from models.WeightedAttLayer import AttentionWeightedAverage
 from config import *
 
 def get_LSTM_model():
@@ -60,7 +61,8 @@ def get_cudnnGRU_model(embedding_matrix, max_features):
     x = Bidirectional(CuDNNGRU(64, return_sequences=True))(x)
     # x = Dropout(0.15)(x)
     # x = GlobalMaxPool1D()(x)
-    x = AttentionWithContext()(x)
+    # x = AttentionWithContext()(x)
+    x = AttentionWeightedAverage()(x)
 
     x = Dense(64, activation="relu")(x)
     x = BatchNormalization()(x)
