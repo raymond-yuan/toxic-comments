@@ -38,6 +38,8 @@ class IntervalEvaluation(Callback):
                         )
             else:
                 y_pred = self.model.predict(self.X_val, verbose=1)
+            print(self.y_val.shape)
+            print(y_pred.shape)
             score = roc_auc_score(self.y_val, y_pred)
             print("interval evaluation - epoch: {:d} - score: {:.6f}".format(epoch + 1, score))
             if score > self.best:
@@ -211,7 +213,8 @@ def ensemble_submissions(in_list):
     return sum(np.array(in_list)) / float(len(in_list))
 
 if __name__ == '__main__':
-    ensembler('/Users/raymondyuan/Documents/projects/toxic-comments/data/fasttext-wiki.en.bin-GRU_Ensemble-2018-02-10-05:17:16.741376/')
+    sub_dir = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-14-08:50:52.801519/'  
+    ensembler(sub_dir)
     # with open(word_idex_path, 'rb') as word_index_file:
     #     word_index = pkl.load(word_index_file)
     #

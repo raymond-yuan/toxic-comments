@@ -49,7 +49,12 @@ class Pipeline(object):
             list_sentences_train = np.concatenate((list_sentences_train, add_on_tr[r_idxs]))
             self.y_tr = np.concatenate((self.y_tr, add_on_y[r_idxs]))
 
-        print('TYPE', self.y_tr.shape)
+        if testing:
+            self.y_tr = self.y_tr[:10000]
+            list_sentences_train = list_sentences_train[:10000]
+
+        print('Number of examples: ', len(list_sentences_train))
+        print('Y tr shape: ', self.y_tr.shape)
 
         # Standard preprocessing
         tokenizer = text.Tokenizer()
