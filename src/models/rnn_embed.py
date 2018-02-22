@@ -9,6 +9,7 @@ from keras import optimizers
 from models.AttentionWithContext import AttentionWithContext
 from models.WeightedAttLayer import AttentionWeightedAverage
 from config import *
+import utils
 
 def get_LSTM_model():
     embed_size = 128
@@ -55,6 +56,7 @@ def get_GRU_model(embedding_matrix, max_features):
 def get_cudnnGRU_model(embedding_matrix, max_features):
     # embed_size = 128
     inp = Input(shape=(None, ))
+    inp = utils.pad_seq(inp)
     x = Embedding(len(embedding_matrix), embed_size, weights=[embedding_matrix], trainable=False)(inp)
     x = Bidirectional(CuDNNGRU(64, return_sequences=True))(x)
     x = Dropout(0.32)(x)
@@ -92,5 +94,4 @@ def get_GRU_Max_model(embedding_matrix, max_features):
     model.compile(loss='binary_crossentropy',
                   optimizer='adam',
                   metrics=['accuracy'])
-
     return model

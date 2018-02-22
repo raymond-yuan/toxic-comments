@@ -157,21 +157,31 @@ class Pipeline(object):
             ival = utils.IntervalEvaluation(best_roc, self.missing, validation_data=(x_val, y_val), interval=1)
 
             self.callbacks_list = [early, checkpoint]
-            spe = math.ceil(x_tr_cut.shape[0] / batch_size)
-            spv = math.ceil(x_val.shape[0] / batch_size)
-            tr_batch_generator = utils.batch_seq(x_tr_cut, y_tr_cut, batch_size, self.missing)
-            val_batch_generator = utils.batch_seq(x_val, y_val, batch_size, self.missing)
-            fit = model.fit_generator(tr_batch_generator,
-                                      epochs=epochs,
-                                      validation_data=val_batch_generator,
-                                      callbacks=self.callbacks_list,
-                                      # steps_per_epoch=spe,
-                                      # validation_steps=spv,
-                                      shuffle=True,
-                                      use_multiprocessing=True,
-                                      max_queue_size=18000,
-                                      workers=5
-                                      )
+
+            if pad_batches:
+                spe = math.ceil(x_tr_cut.shape[0] / batch_size)
+                spv = math.ceil(x_val.shape[0] / batch_size)
+                tr_batch_generator = utils.batch_seq(x_tr_cut, y_tr_cut, batch_size, self.missing)
+                val_batch_generator = utils.batch_seq(x_val, y_val, batch_size, self.missing)
+                fit = model.fit_generator(tr_batch_generator,
+                                          epochs=epochs,
+                                          validation_data=val_batch_generator,
+                                          callbacks=self.callbacks_list,
+                                          # steps_per_epoch=spe,
+                                          # validation_steps=spv,
+                                          shuffle=True,
+                                          use_multiprocessing=True,
+                                          max_queue_size=18000,
+                                          workers=5
+                                          )
+            else:
+                fit = model.fit(x_tr_cut, y_tr_cut,
+                                validation_data=(x_val, y_val),
+                                batch_size=batch_size,
+                                epochs=epochs,
+                                callbacks=self.callbacks_list,
+                                shuffle=True
+                                )
 
             print('Finished training!')
             model.load_weights(self.file_path)
