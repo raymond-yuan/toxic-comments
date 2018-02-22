@@ -6,6 +6,7 @@ import os, codecs
 from config import *
 import logging
 import math
+import tensorflow as tf
 
 from sklearn.metrics import roc_auc_score
 from keras.callbacks import Callback
@@ -102,14 +103,18 @@ def batch_gen(x_tr, y_tr, batch_size=32):
 
 def pad_seq(data):
     # Get lengths of each row of data
-    lens = np.array([len(i) for i in data])
 
+    lens = np.array([len(i) for i in data])
     # Mask of valid places in each row
     mask = np.arange(lens.max()) < lens[:, None]
     # Setup output array and put elements from data into masked positions
     out = np.zeros(mask.shape, dtype=np.int32)
     out[mask] = np.concatenate(data)
     return out
+
+def tf_pad_seq(data):
+    lens = sequence.pad_sequences(data, padding='post', truncating='post')
+    return lens
 
 class batch_seq(Sequence):
     def __init__(self, x_set, y_set, batch_size, missing):
@@ -126,8 +131,8 @@ class batch_seq(Sequence):
 
         if pad_batches:
             batch_x = [np.array([word for word in sample if word not in self.missing]) for sample in batch_x]
-            batch_x = sequence.pad_sequences(batch_x, padding='post', truncating='post')
-            # batch_x = pad_seq(batch_x)
+            # batch_x = sequence.pad_sequences(batch_x, padding='post', truncating='post')
+            batch_x = pad_seq(batch_x)
         if self.train:
             batch_y = self.y[idx * self.batch_size:(idx + 1) * self.batch_size]
             return batch_x, batch_y
@@ -213,7 +218,7 @@ def ensemble_submissions(in_list):
     return sum(np.array(in_list)) / float(len(in_list))
 
 if __name__ == '__main__':
-    sub_dir = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-14-08:50:52.801519/'  
+    sub_dir = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-14-08:50:52.801519/'
     ensembler(sub_dir)
     # with open(word_idex_path, 'rb') as word_index_file:
     #     word_index = pkl.load(word_index_file)

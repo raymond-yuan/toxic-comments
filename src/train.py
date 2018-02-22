@@ -26,69 +26,81 @@ class Pipeline(object):
     def __init__(self):
         # Load the data
         np.random.seed(seed=0)
-
-        train = pd.read_csv(TRAIN_DATA_FILE)
-        test = pd.read_csv(TEST_DATA_FILE)
-        train = train.sample(frac=1)
-
-        list_sentences_train = train["comment_text"].fillna("__na__").values
+        gen_data = os.path.exists(data_path)
         self.list_classes = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
-        self.y_tr = train[self.list_classes].values
-        list_sentences_test = test["comment_text"].fillna("__na__").values
 
-        for a in data_augmentors:
-            tr = pd.read_csv('../data/' + a)
-            add_on_tr = tr["comment_text"].fillna("__na__").values
-            add_on_y = tr[self.list_classes].values
-            len_add_on_tr, len_add_on_y = len(add_on_tr), len(add_on_y)
-            # assert len_add_on_tr == len(list_sentences_train) and len_add_on_tr != 0, 'Length of train and y not matched!'
 
-            # ps = np.random.random(len(list_sentences_train))
-            # list_sentences_train = np.where(ps > 0.5, list_sentences_train, add_on_tr)
-
-            r_idxs = np.random.permutation(len_add_on_tr)
-            list_sentences_train = np.concatenate((list_sentences_train, add_on_tr[r_idxs]))
-            self.y_tr = np.concatenate((self.y_tr, add_on_y[r_idxs]))
-
-        if testing:
-            self.y_tr = self.y_tr[:10000]
-            list_sentences_train = list_sentences_train[:10000]
-
-        print('Number of examples: ', len(list_sentences_train))
-        print('Y tr shape: ', self.y_tr.shape)
-
-        # Standard preprocessing
-        tokenizer = text.Tokenizer()
-
-        tokenizer.fit_on_texts(list(list_sentences_train))
-        if pad_batches:
-            self.X_tr  = np.array(tokenizer.texts_to_sequences(list_sentences_train))
-            self.X_te = np.array(tokenizer.texts_to_sequences(list_sentences_test))
+        if gen_data:
+            print('Loading data from path ', data_path)
+            load_data = np.load(data_path)
+            self.X_tr = load_data['x_tr']
+            self.y_tr = load_data['y_tr']
+            self.X_te = load_data['x_te']
+            print('Train shape ', self.X_tr.shape)
         else:
-            list_tokenized_train = tokenizer.texts_to_sequences(list_sentences_train)
-            list_tokenized_test = tokenizer.texts_to_sequences(list_sentences_test)
-            self.X_tr = sequence.pad_sequences(list_tokenized_train, padding='post', truncating='post', maxlen=maxlen)
-            self.X_te = sequence.pad_sequences(list_tokenized_test, padding='post', truncating='post', maxlen=maxlen)
+
+            train = pd.read_csv(TRAIN_DATA_FILE)
+            test = pd.read_csv(TEST_DATA_FILE)
+            train = train.sample(frac=1)
+
+            list_sentences_train = train["comment_text"].fillna("__na__").values
+            self.y_tr = train[self.list_classes].values
+            list_sentences_test = test["comment_text"].fillna("__na__").values
+
+            for a in data_augmentors:
+                tr = pd.read_csv('../data/' + a)
+                add_on_tr = tr["comment_text"].fillna("__na__").values
+                add_on_y = tr[self.list_classes].values
+                len_add_on_tr, len_add_on_y = len(add_on_tr), len(add_on_y)
+                # assert len_add_on_tr == len(list_sentences_train) and len_add_on_tr != 0, 'Length of train and y not matched!'
+
+                # ps = np.random.random(len(list_sentences_train))
+                # list_sentences_train = np.where(ps > 0.5, list_sentences_train, add_on_tr)
+
+                r_idxs = np.random.permutation(len_add_on_tr)
+                list_sentences_train = np.concatenate((list_sentences_train, add_on_tr[r_idxs]))
+                self.y_tr = np.concatenate((self.y_tr, add_on_y[r_idxs]))
+
+            # if testing:
+            #     self.y_tr = self.y_tr[:10000]
+            #     list_sentences_train = list_sentences_train[:10000]
+
+            print('Number of examples: ', len(list_sentences_train))
+            print('Y tr shape: ', self.y_tr.shape)
+
+            # Standard preprocessing
+            tokenizer = text.Tokenizer()
+
+            tokenizer.fit_on_texts(list(list_sentences_train))
+            if pad_batches:
+                self.X_tr  = np.array(tokenizer.texts_to_sequences(list_sentences_train))
+                self.X_te = np.array(tokenizer.texts_to_sequences(list_sentences_test))
+            else:
+                list_tokenized_train = tokenizer.texts_to_sequences(list_sentences_train)
+                list_tokenized_test = tokenizer.texts_to_sequences(list_sentences_test)
+                self.X_tr = sequence.pad_sequences(list_tokenized_train, padding='post', truncating='post', maxlen=maxlen)
+                self.X_te = sequence.pad_sequences(list_tokenized_test, padding='post', truncating='post', maxlen=maxlen)
+
+            np.savez(data_path, x_tr=self.X_tr, y_tr=self.y_tr, x_te=self.X_te)
+
+
 
         self.ensemble = pd.read_csv("../data/sample_submission.csv")
         self.ensemble[self.list_classes] = np.zeros((self.X_te.shape[0], len(self.list_classes)))
-        wi = tokenizer.word_index
-        self.max_features = len(wi)
 
-        # embeddings_index = dict(get_coefs(*o.strip().split()) for o in open(EMBEDDING_FILE))
-        # embeddings_index = dict(get_coefs(*o.rstrip().rsplit()) for o in codecs.open(EMBEDDING_FILE, encoding='utf-8')
-        # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index)
-        # self.embedding_matrix = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE,
-        #                                                       tokenizer.word_index,
-        #                                                       max_features=max_features)
-
-        # embeddings_index = dict(get_coefs(*o.strip().split()) for o in open(EMBEDDING_FILE))
-        # embeddings_index = dict(get_coefs(*o.rstrip().rsplit()) for o in codecs.open(EMBEDDING_FILE, encoding='utf-8')
-        # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index)
-
-        embedding_file_name = EMBEDDING_FILE + '.{}-{}.npz'.format(embedding_type, self.max_features)
         if load_embed:
             embedding_file_name = load_embed
+
+            wi_path = embedding_file_name + '.pkl'
+            with open(wi_path, 'rb') as f:
+                wi = pickle.load(f)
+        else:
+            assert gen_data, 'somehting went wrong in generating data'
+            wi = tokenizer.word_index
+        self.max_features = len(wi)
+        if load_embed is None:
+            embedding_file_name = EMBEDDING_FILE + '.{}-{}.npz'.format(embedding_type, self.max_features)
+
         # embedding_file_name = '/home/raymond/Documents/projects/toxic-comments/data/wiki.en.bin.fasttext-237978.npz'
         # embedding_file_name = '/home/raymond/Documents/projects/toxic-comments/data/wiki.en.vec.fasttextLim-237978.npz'
         print('Embedding file name', embedding_file_name)
@@ -99,7 +111,7 @@ class Pipeline(object):
             missing_idx = np.load(embedding_file_name)['missing'].reshape(1)[0]
         else:
             print('Generating embeddings')
-            with open(embedding_file_name + '.pkl', 'wb') as f:
+            with open(wi_path, 'wb') as f:
                 pickle.dump(wi, f, pickle.HIGHEST_PROTOCOL)
             if embedding_type == 'fasttextLim':
                 # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index, max_features=max_features)

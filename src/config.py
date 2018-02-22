@@ -34,3 +34,6 @@ batch_size = 16
 epochs = 7
 
 pad_batches = True
+data_path = 'all_data.npz'
+data_path = 'unpadded_' + data_path if pad_batches else '{}_'.format(maxlen) + data_path
+data_path = '../data/' + data_path
