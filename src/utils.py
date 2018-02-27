@@ -65,6 +65,7 @@ def ensembler(file_dir):
             p_s = pd.read_csv(file_dir + file)
             ensemble[label_cols] += p_s[label_cols]
     ensemble[label_cols] /= count
+    print(count)
     ensemble.to_csv(file_dir + "ensemble_{}_.csv".format('ensemble'), index=False)
 
 

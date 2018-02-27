@@ -11,6 +11,8 @@ from config import *
 from tqdm import tqdm
 import pickle
 import shutil
+from models.WeightedAttLayer import AttentionWeightedAverage
+
 
 # Input data files are available in the "../data/" directory.
 # For example, running this (by clicking run or pressing Shift+Enter) will list the files in the input directory
@@ -21,16 +23,17 @@ print(check_output(["ls", "../data"]).decode("utf8"))
 from keras.preprocessing import text, sequence
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from models.rnn_embed import *
+from keras.models import load_model
 
 class Pipeline(object):
     def __init__(self):
         # Load the data
         np.random.seed(seed=0)
-        gen_data = os.path.exists(data_path)
+        load_data = os.path.exists(data_path)
         self.list_classes = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
 
 
-        if gen_data:
+        if load_data:
             print('Loading data from path ', data_path)
             load_data = np.load(data_path)
             self.X_tr = load_data['x_tr']
@@ -38,7 +41,7 @@ class Pipeline(object):
             self.X_te = load_data['x_te']
             print('Train shape ', self.X_tr.shape)
         else:
-
+            print('Generating data')
             train = pd.read_csv(TRAIN_DATA_FILE)
             test = pd.read_csv(TEST_DATA_FILE)
             train = train.sample(frac=1)
@@ -91,12 +94,16 @@ class Pipeline(object):
         if load_embed:
             embedding_file_name = load_embed
 
-            wi_path = embedding_file_name + '.pkl'
+
+        wi_path = data_path + '.wi.pkl'
+        if os.path.exists(wi_path):
             with open(wi_path, 'rb') as f:
                 wi = pickle.load(f)
         else:
-            assert gen_data, 'somehting went wrong in generating data'
+            assert not load_data, 'somehting went wrong in generating data'
             wi = tokenizer.word_index
+            with open(wi_path, 'wb') as f:
+                pickle.dump(wi, f, pickle.HIGHEST_PROTOCOL)
         self.max_features = len(wi)
         if load_embed is None:
             embedding_file_name = EMBEDDING_FILE + '.{}-{}.npz'.format(embedding_type, self.max_features)
@@ -111,8 +118,6 @@ class Pipeline(object):
             missing_idx = np.load(embedding_file_name)['missing'].reshape(1)[0]
         else:
             print('Generating embeddings')
-            with open(wi_path, 'wb') as f:
-                pickle.dump(wi, f, pickle.HIGHEST_PROTOCOL)
             if embedding_type == 'fasttextLim':
                 # embedding_matrix, missing_idx = utils.load_w2v_embeddings(EMBEDDING_FILE, tokenizer.word_index, max_features=max_features)
                 embedding_matrix, missing_idx = utils.load_fasttext_embeddings_lim(EMBEDDING_FILE, wi, self.max_features)
@@ -127,6 +132,8 @@ class Pipeline(object):
         self.embedding_matrix = embedding_matrix
         self.missing = missing_idx
 
+        print('Embedding matrix size ', self.embedding_matrix.shape)
+
         if not os.path.exists(MODEL_DIR):
             # os.makedirs(MODEL_DIR, mode=0o777)
             try:
@@ -135,13 +142,18 @@ class Pipeline(object):
             finally:
                 os.umask(original_umask)
 
-    def load_model(self):
+    def load_model(self, file_path):
+        if os.path.exists(file_path):
+            print('Loading model weights from ' + file_path)
+            return load_model(file_path,
+                        custom_objects={'AttentionWeightedAverage': AttentionWeightedAverage})
+
         if model_name == 'GRU_Ensemble':
-            model = get_GRU_model(self.embedding_matrix, self.max_features)
+            model = get_GRU_model(self.embedding_matrix)
         elif model_name == 'GRU_CUDNN':
-            model = get_cudnnGRU_model(self.embedding_matrix, self.max_features)
+            model = get_cudnnGRU_model(self.embedding_matrix)
         elif model_name == 'GRU_MaxEnsemble':
-            model = get_GRU_Max_model(self.embedding_matrix, self.max_features)
+            model = get_GRU_Max_model(self.embedding_matrix)
         elif model_name == 'LSTM_baseline':
             model = get_LSTM_model()
         else:
@@ -152,7 +164,8 @@ class Pipeline(object):
         n_examples = len(self.X_tr)
         r_idxs = np.random.permutation(n_examples)
         splits = int((1 / n_splits) * n_examples)
-        for val_idx in range(0, n_splits):
+        for val_idx in range(9, n_splits):
+            print('Working on fold {}, out of {}'.format(val_idx + 1, n_splits))
             val_st, val_end = val_idx * splits, val_idx * splits + splits
             x_val = self.X_tr[r_idxs[val_st:val_end]]
             y_val = self.y_tr[r_idxs[val_st:val_end]]
@@ -160,8 +173,8 @@ class Pipeline(object):
             y_tr_cut = np.concatenate((self.y_tr[r_idxs[:val_st]], self.y_tr[r_idxs[val_end:]]))
 
             # Build model architecture
-            model = self.load_model()
             self.file_path = MODEL_DIR + "weights_{}.best.{}.hdf5".format(model_name, val_idx)
+            model = self.load_model(self.file_path)
             print(model.summary())
             checkpoint = ModelCheckpoint(self.file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
             early = EarlyStopping(monitor="val_loss", mode="min", patience=20)
@@ -182,9 +195,9 @@ class Pipeline(object):
                                           # steps_per_epoch=spe,
                                           # validation_steps=spv,
                                           shuffle=True,
-                                          use_multiprocessing=True,
-                                          max_queue_size=18000,
-                                          workers=5
+                                          use_multiprocessing=False
+                                        #   max_queue_size=18000,
+                                        #   workers=5
                                           )
             else:
                 fit = model.fit(x_tr_cut, y_tr_cut,
@@ -217,11 +230,14 @@ class Pipeline(object):
 
             K.clear_session()
 
-        self.ensemble[self.list_classes] /= float(n_splits)
-        self.ensemble.to_csv(MODEL_DIR + "ensemble_{}_.csv".format(model_name), index=False)
+
+        # self.ensemble[self.list_classes] /= float(n_splits)
+        # self.ensemble.to_csv(MODEL_DIR + "ensemble_{}_.csv".format(model_name), index=False)
 
 if __name__ == '__main__':
     pipeline = Pipeline()
     pipeline.train()
     if testing:
         shutil.rmtree(MODEL_DIR)
+
+    utils.ensembler('/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_CUDNN-2018-02-23-11:42:06.347564/')
