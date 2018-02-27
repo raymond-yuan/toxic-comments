@@ -2,6 +2,7 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 from gensim.models import KeyedVectors, FastText
+from keras.models import load_model
 import os, codecs
 from config import *
 import logging
@@ -9,9 +10,85 @@ import math
 import tensorflow as tf
 
 from sklearn.metrics import roc_auc_score
+from sklearn.linear_model import LogisticRegression
 from keras.callbacks import Callback
 from keras.preprocessing import sequence
 from keras.utils import Sequence
+from models.WeightedAttLayer import AttentionWeightedAverage
+
+def stacking(model_dirs):
+    np.random.seed(seed=0)
+    list_classes = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
+    embedding_file_name = '/home/raymond/Documents/projects/toxic-comments/data/fasttext-embeddings/wiki.en.bin.fasttext-257356.npz'
+
+    print('Loading embeddings')
+    # embedding_matrix = np.load(embedding_file_name)['embed_mat']
+    missing_idx = np.load(embedding_file_name)['missing'].reshape(1)[0]
+
+    print('Loading data from path ', data_path)
+    load_data = np.load(data_path)
+    X_tr = load_data['x_tr']
+    y_tr = load_data['y_tr']
+    X_te = load_data['x_te']
+    print('Train shape ', X_tr.shape)
+    n_examples = len(X_tr)
+    r_idxs = np.random.permutation(n_examples)
+    splits = int((1 / n_splits) * n_examples)
+
+    val_sets = []
+    for val_idx in range(0, n_splits):
+        print('Working on fold {}, out of {}'.format(val_idx + 1, n_splits))
+        val_st, val_end = val_idx * splits, val_idx * splits + splits
+        x_val = X_tr[r_idxs[val_st:val_end]]
+        y_val = y_tr[r_idxs[val_st:val_end]]
+        val_sets.append((x_val, y_val))
+
+    pred_train_models = []
+    pred_test_models = []
+    for model_dir in model_dirs:
+        dataset_train_j = [None for _ in range(n_splits)]
+        dataset_test_j = 0
+        for file in os.listdir(model_dir):
+            if file.endswith(".hdf5"):
+                idx = int(file.split('.')[-2])
+                print('Loading model {}, and using val split idx {}'.format(file, idx))
+                model = load_model(os.path.join(model_dir, file),
+                                   custom_objects={'AttentionWeightedAverage': AttentionWeightedAverage})
+
+                if pad_batches:
+                    test_batch_gen = batch_seq(X_te, None, batch_size, missing_idx)
+                    test_pred = model.predict_generator(test_batch_gen, verbose=1)
+
+                    val_batch_gen = batch_seq(val_sets[idx], None, batch_size, missing_idx)
+                    val_pred = model.predict_generator(val_batch_gen, verbose=1)
+                else:
+                    test_pred = model.predict(X_te, verbose=1)
+                    val_pred = model.predict(val_sets[idx])
+                dataset_train_j[idx] = val_pred
+                dataset_test_j += test_pred
+        stack_train = np.vstack(dataset_train_j)
+        print('LEN OF STACK TRAIN {}, TOTAL NUM EXAMPLES {}, EQUALITY {}'.format(len(stack_train),
+                                                                                 n_examples,
+                                                                                 len(stack_train) == n_examples))
+
+        # assert len(stack_train) == n_examples, ''
+        pred_train_models.append(stack_train)
+        pred_test_models.append(dataset_test_j / float(n_splits))
+
+    pred_blend_train = np.hstack(pred_train_models)
+    pred_blend_test = np.hstack(pred_test_models)
+
+    clf = LogisticRegression(penalty='l1')
+    clf.fit(pred_blend_train, y_tr)
+
+    estimates = clf.predict_proba(pred_blend_test)
+    np.savez('super_learner_estimates.npz', estimates=estimates)
+    print('Size of estimates: {}'.format(estimates.shape))
+    print('Generating submission csv')
+    sample_submission = pd.read_csv("../data/sample_submission.csv")
+
+    sample_submission[list_classes] = estimates
+    sample_submission.to_csv("{}_{}.csv".format(model_name, 'superLearner'), index=False)
 
 
 class IntervalEvaluation(Callback):
@@ -219,10 +296,15 @@ def ensemble_submissions(in_list):
     return sum(np.array(in_list)) / float(len(in_list))
 
 if __name__ == '__main__':
-    sub_dir = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-14-08:50:52.801519/'
-    ensembler(sub_dir)
+    # sub_dir = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-14-08:50:52.801519/'
+    # ensembler(sub_dir)
     # with open(word_idex_path, 'rb') as word_index_file:
     #     word_index = pkl.load(word_index_file)
     #
     # embeddings_mat, missing = load_fasttext_embeddings(EMBEDDING_FILE, word_index)
     # save_embeddings(embeddings_mat, missing)
+    stacking(['/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_Ensemble-2018-02-10-05:17:16.741376',
+              '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-12-23:20:14.481040',
+              '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_CUDNN-2018-02-23-11:42:06.347564',
+              '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-14-08:50:52.801519'
+              ])

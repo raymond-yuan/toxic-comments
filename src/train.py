@@ -164,7 +164,7 @@ class Pipeline(object):
         n_examples = len(self.X_tr)
         r_idxs = np.random.permutation(n_examples)
         splits = int((1 / n_splits) * n_examples)
-        for val_idx in range(9, n_splits):
+        for val_idx in range(0, n_splits):
             print('Working on fold {}, out of {}'.format(val_idx + 1, n_splits))
             val_st, val_end = val_idx * splits, val_idx * splits + splits
             x_val = self.X_tr[r_idxs[val_st:val_end]]
