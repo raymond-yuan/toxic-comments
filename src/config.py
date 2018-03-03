@@ -24,7 +24,7 @@ else:
     MODEL_DIR = "./submissions/{}-{}-{}-{}/".format(embedding_type, embed_type,
                                             model_name, str(datetime.now()).replace(' ', '-'))
     # MODEL_DIR = '/home/raymond/Documents/projects/toxic-comments/src/submissions/word2vec-crawl-300d-2M.vec-GRU_CUDNN-2018-02-22-14:19:59.870163/'
-MODEL_DIR = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_CUDNN-2018-02-23-11:42:06.347564/'
+# MODEL_DIR = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_CUDNN-2018-02-23-11:42:06.347564/'
 data_augmentors = ["train_de.csv", "train_fr.csv", "train_es.csv"]
 # data_augmentors = []
 # MODEL_DIR = '/home/ubuntu/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_Ensemble-2018-02-14-14:59:50.685781/'
@@ -33,7 +33,7 @@ maxlen = 500  # max number of words in a comment to use
 embed_size = 300  # Size of each word vector (default value)
 
 batch_size = 16
-epochs = 7
+epochs = 5
 
 pad_batches = True
 data_path = 'all_data.npz'

@@ -3,7 +3,7 @@
 # Any results you write to the current directory are saved as output.
 
 from keras.models import Model
-from keras.layers import Dense, Embedding, Input, MaxoutDense, Activation, BatchNormalization
+from keras.layers import Dense, Embedding, Input, MaxoutDense, Activation, BatchNormalization, SpatialDropout1D
 from keras.layers import LSTM, GRU, Bidirectional, GlobalMaxPool1D, Dropout, CuDNNGRU, concatenate
 from keras import optimizers
 from models.AttentionWithContext import AttentionWithContext
@@ -32,6 +32,7 @@ def get_GRU_model(embedding_matrix):
     # embed_size = 128
     inp = Input(shape=(None, ))
     x = Embedding(len(embedding_matrix), embed_size, weights=[embedding_matrix], mask_zero=True, trainable=False)(inp)
+    x = SpatialDropout1D(0.2)(x)
     x = Bidirectional(GRU(64, return_sequences=True))(x)
     x = Dropout(0.32)(x)
     x = Bidirectional(GRU(64, return_sequences=True))(x)
@@ -59,8 +60,9 @@ def get_cudnnGRU_model(embedding_matrix):
 
     # inp = utils.pad_seq(inp)
     x = Embedding(len(embedding_matrix), embed_size, weights=[embedding_matrix], trainable=False)(inp)
+    x = SpatialDropout1D(0.5)(x)
     x = Bidirectional(CuDNNGRU(64, return_sequences=True))(x)
-    x = Dropout(0.32)(x)
+    x = Dropout(0.2)(x)
     x = Bidirectional(CuDNNGRU(64, return_sequences=True))(x)
     # x = Dropout(0.15)(x)
     max_pool = GlobalMaxPool1D()(x)

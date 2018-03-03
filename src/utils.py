@@ -105,7 +105,7 @@ def stacking(model_dirs):
         clf = LogisticRegression(C=0.01, fit_intercept=False, penalty='l1')
         train_preds = []
         test_preds = []
-        for i in range(4):
+        for i in range(len(model_dirs)):
             train_preds.append(np.expand_dims(pred_blend_train[:, len(list_classes) * i + c], 1))
             test_preds.append(np.expand_dims(pred_blend_test[:, len(list_classes) * i + c], 1))
         train_preds = np.hstack(train_preds)
