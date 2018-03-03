@@ -8,6 +8,7 @@ from config import *
 import logging
 import math
 import tensorflow as tf
+import keras.backend as K
 
 from sklearn.metrics import roc_auc_score
 from sklearn.linear_model import LogisticRegression
@@ -36,59 +37,99 @@ def stacking(model_dirs):
     splits = int((1 / n_splits) * n_examples)
 
     val_sets = []
+    build_y_tr = []
     for val_idx in range(0, n_splits):
-        print('Working on fold {}, out of {}'.format(val_idx + 1, n_splits))
-        val_st, val_end = val_idx * splits, val_idx * splits + splits
+        print('Loading fold {}, out of {}'.format(val_idx + 1, n_splits))
+        if val_idx == n_splits - 1:
+            val_st, val_end = val_idx * splits, n_examples
+        else:
+            val_st, val_end = val_idx * splits, val_idx * splits + splits
         x_val = X_tr[r_idxs[val_st:val_end]]
         y_val = y_tr[r_idxs[val_st:val_end]]
         val_sets.append((x_val, y_val))
+        build_y_tr.append(y_val)
+
+    build_y_tr = np.vstack(build_y_tr)
+    print(build_y_tr.shape)
 
     pred_train_models = []
     pred_test_models = []
-    for model_dir in model_dirs:
-        dataset_train_j = [None for _ in range(n_splits)]
-        dataset_test_j = 0
-        for file in os.listdir(model_dir):
-            if file.endswith(".hdf5"):
-                idx = int(file.split('.')[-2])
-                print('Loading model {}, and using val split idx {}'.format(file, idx))
-                model = load_model(os.path.join(model_dir, file),
-                                   custom_objects={'AttentionWeightedAverage': AttentionWeightedAverage})
+    # for model_dir in model_dirs:
+    #     dataset_train_j = [None for _ in range(n_splits)]
+    #     dataset_test_j = 0
+    #     for file in os.listdir(model_dir):
+    #         if file.endswith(".hdf5"):
+    #             idx = int(file.split('.')[-2])
+    #             print('Loading model {}, and using val split idx {}'.format(file, idx))
+    #             model = load_model(os.path.join(model_dir, file),
+    #                                custom_objects={'AttentionWeightedAverage': AttentionWeightedAverage})
+    #             # model.summary()
+    #             val_x, val_y = val_sets[idx]
+    #             if pad_batches:
+    #                 test_batch_gen = batch_seq(X_te, None, batch_size, missing_idx)
+    #                 test_pred = model.predict_generator(test_batch_gen, verbose=1)
+    #
+    #                 val_batch_gen = batch_seq(val_x, None, batch_size, missing_idx)
+    #                 val_pred = model.predict_generator(val_batch_gen, verbose=1)
+    #             else:
+    #                 test_pred = model.predict(X_te, verbose=1)
+    #                 val_pred = model.predict(val_x)
+    #             dataset_train_j[idx] = val_pred
+    #             dataset_test_j += test_pred
+    #
+    #             K.clear_session()
+    #     stack_train = np.vstack(dataset_train_j)
+    #     assert len(stack_train) == n_examples, 'Missing examples from cross validatiosn!'
+    #
+    #     # assert len(stack_train) == n_examples, ''
+    #     pred_train_models.append(stack_train)
+    #     pred_test_models.append(dataset_test_j / float(n_splits))
+    #
+    # pred_blend_train = np.hstack(pred_train_models)
+    # pred_blend_test = np.hstack(pred_test_models)
+    #
+    # np.savez('preds_SL.npz', pred_blend_train=pred_blend_train, pred_blend_test=pred_blend_test)
+    #
+    # print('FINISHED GENERATING PREDS')
+    from scipy.special import logit
+    load_preds = np.load('preds_SL.npz')
+    pred_blend_train = logit(load_preds['pred_blend_train'])
+    pred_blend_test = logit(load_preds['pred_blend_test'])
+    print('pred test', pred_blend_test.shape)
+    # print(pred_blend_train.shape)
+    # pred_blend_test = np.split(pred_blend_test, 4, axis=1)
 
-                if pad_batches:
-                    test_batch_gen = batch_seq(X_te, None, batch_size, missing_idx)
-                    test_pred = model.predict_generator(test_batch_gen, verbose=1)
+    coeffs = []
+    all_estimates = []
+    for c in range(len(list_classes)):
+        clf = LogisticRegression(C=0.01, fit_intercept=False, penalty='l1')
+        train_preds = []
+        test_preds = []
+        for i in range(4):
+            train_preds.append(np.expand_dims(pred_blend_train[:, len(list_classes) * i + c], 1))
+            test_preds.append(np.expand_dims(pred_blend_test[:, len(list_classes) * i + c], 1))
+        train_preds = np.hstack(train_preds)
+        test_preds = np.hstack(test_preds)
 
-                    val_batch_gen = batch_seq(val_sets[idx], None, batch_size, missing_idx)
-                    val_pred = model.predict_generator(val_batch_gen, verbose=1)
-                else:
-                    test_pred = model.predict(X_te, verbose=1)
-                    val_pred = model.predict(val_sets[idx])
-                dataset_train_j[idx] = val_pred
-                dataset_test_j += test_pred
-        stack_train = np.vstack(dataset_train_j)
-        print('LEN OF STACK TRAIN {}, TOTAL NUM EXAMPLES {}, EQUALITY {}'.format(len(stack_train),
-                                                                                 n_examples,
-                                                                                 len(stack_train) == n_examples))
+        clf.fit(train_preds, build_y_tr[:, c])
 
-        # assert len(stack_train) == n_examples, ''
-        pred_train_models.append(stack_train)
-        pred_test_models.append(dataset_test_j / float(n_splits))
+        print('COEFS: ', clf.coef_)
+        coeffs.append(clf.coef_)
+        np.savez('superlearner_coefficients_{}.npz'.format(c), coef=coeffs)
 
-    pred_blend_train = np.hstack(pred_train_models)
-    pred_blend_test = np.hstack(pred_test_models)
-
-    clf = LogisticRegression(penalty='l1')
-    clf.fit(pred_blend_train, y_tr)
-
-    estimates = clf.predict_proba(pred_blend_test)
-    np.savez('super_learner_estimates.npz', estimates=estimates)
-    print('Size of estimates: {}'.format(estimates.shape))
+        estimates = clf.predict_proba(test_preds)[:, 1]
+        all_estimates.append(estimates)
+        np.savez('super_learner_estimates_{}.npz'.format(c), estimates=estimates)
+        print('Size of estimates: {}'.format(estimates.shape))
+    all_estimates = [np.expand_dims(pred, 1) for pred in all_estimates]
+    np.savez('super_learner_estimates_ALL.npz', estimates=np.hstack(all_estimates))
     print('Generating submission csv')
     sample_submission = pd.read_csv("../data/sample_submission.csv")
-
-    sample_submission[list_classes] = estimates
-    sample_submission.to_csv("{}_{}.csv".format(model_name, 'superLearner'), index=False)
+    print(sample_submission[list_classes].shape)
+    print('all estiamtes shape', np.hstack(all_estimates).shape)
+    print(type(np.hstack(all_estimates)))
+    sample_submission[list_classes] = np.hstack(all_estimates)
+    sample_submission.to_csv("{}_{}.csv".format(model_name, 'superLearner_logits'), index=False)
 
 
 class IntervalEvaluation(Callback):
@@ -304,7 +345,7 @@ if __name__ == '__main__':
     # embeddings_mat, missing = load_fasttext_embeddings(EMBEDDING_FILE, word_index)
     # save_embeddings(embeddings_mat, missing)
     stacking(['/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_Ensemble-2018-02-10-05:17:16.741376',
-              '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-12-23:20:14.481040',
+        '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-12-23:20:14.481040',
               '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_CUDNN-2018-02-23-11:42:06.347564',
               '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-14-08:50:52.801519'
               ])
