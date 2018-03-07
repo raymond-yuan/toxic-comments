@@ -16,8 +16,10 @@ from keras.callbacks import Callback
 from keras.preprocessing import sequence
 from keras.utils import Sequence
 from models.WeightedAttLayer import AttentionWeightedAverage
+from scipy.special import logit
+from sklearn.grid_search import GridSearchCV
 
-def stacking(model_dirs):
+def stacking(model_dirs, load_preds_file=None):
     np.random.seed(seed=0)
     list_classes = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
     embedding_file_name = '/home/raymond/Documents/projects/toxic-comments/data/fasttext-embeddings/wiki.en.bin.fasttext-257356.npz'
@@ -54,68 +56,80 @@ def stacking(model_dirs):
 
     pred_train_models = []
     pred_test_models = []
-    # for model_dir in model_dirs:
-    #     dataset_train_j = [None for _ in range(n_splits)]
-    #     dataset_test_j = 0
-    #     for file in os.listdir(model_dir):
-    #         if file.endswith(".hdf5"):
-    #             idx = int(file.split('.')[-2])
-    #             print('Loading model {}, and using val split idx {}'.format(file, idx))
-    #             model = load_model(os.path.join(model_dir, file),
-    #                                custom_objects={'AttentionWeightedAverage': AttentionWeightedAverage})
-    #             # model.summary()
-    #             val_x, val_y = val_sets[idx]
-    #             if pad_batches:
-    #                 test_batch_gen = batch_seq(X_te, None, batch_size, missing_idx)
-    #                 test_pred = model.predict_generator(test_batch_gen, verbose=1)
-    #
-    #                 val_batch_gen = batch_seq(val_x, None, batch_size, missing_idx)
-    #                 val_pred = model.predict_generator(val_batch_gen, verbose=1)
-    #             else:
-    #                 test_pred = model.predict(X_te, verbose=1)
-    #                 val_pred = model.predict(val_x)
-    #             dataset_train_j[idx] = val_pred
-    #             dataset_test_j += test_pred
-    #
-    #             K.clear_session()
-    #     stack_train = np.vstack(dataset_train_j)
-    #     assert len(stack_train) == n_examples, 'Missing examples from cross validatiosn!'
-    #
-    #     # assert len(stack_train) == n_examples, ''
-    #     pred_train_models.append(stack_train)
-    #     pred_test_models.append(dataset_test_j / float(n_splits))
-    #
-    # pred_blend_train = np.hstack(pred_train_models)
-    # pred_blend_test = np.hstack(pred_test_models)
-    #
-    # np.savez('preds_SL.npz', pred_blend_train=pred_blend_train, pred_blend_test=pred_blend_test)
-    #
-    # print('FINISHED GENERATING PREDS')
-    from scipy.special import logit
-    load_preds = np.load('preds_SL.npz')
-    pred_blend_train = logit(load_preds['pred_blend_train'])
-    pred_blend_test = logit(load_preds['pred_blend_test'])
+    if load_preds_file is None:
+        print('Generating predictions for models')
+        for model_dir in model_dirs:
+            dataset_train_j = [None for _ in range(n_splits)]
+            dataset_test_j = 0
+            for file in os.listdir(model_dir):
+                if file.endswith(".hdf5"):
+                    idx = int(file.split('.')[-2])
+                    print('Loading model {}, and using val split idx {}'.format(file, idx))
+                    model = load_model(os.path.join(model_dir, file),
+                                       custom_objects={'AttentionWeightedAverage': AttentionWeightedAverage})
+                    # model.summary()
+                    val_x, val_y = val_sets[idx]
+                    if pad_batches:
+                        test_batch_gen = batch_seq(X_te, None, batch_size, missing_idx)
+                        test_pred = model.predict_generator(test_batch_gen, verbose=1)
+
+                        val_batch_gen = batch_seq(val_x, None, batch_size, missing_idx)
+                        val_pred = model.predict_generator(val_batch_gen, verbose=1)
+                    else:
+                        test_pred = model.predict(X_te, verbose=1)
+                        val_pred = model.predict(val_x)
+                    dataset_train_j[idx] = val_pred
+                    dataset_test_j += test_pred
+
+                    K.clear_session()
+            stack_train = np.vstack(dataset_train_j)
+            assert len(stack_train) == n_examples, 'Missing examples from cross validatiosn!'
+
+            # assert len(stack_train) == n_examples, ''
+            pred_train_models.append(stack_train)
+            pred_test_models.append(dataset_test_j / float(n_splits))
+
+        pred_blend_train = np.hstack(pred_train_models)
+        pred_blend_test = np.hstack(pred_test_models)
+
+        np.savez('preds_SL.npz', pred_blend_train=pred_blend_train, pred_blend_test=pred_blend_test)
+        pred_blend_test = logit(pred_blend_test)
+        pred_blend_train = logit(pred_blend_train)
+        print('FINISHED GENERATING PREDS')
+    else:
+        print('loading predictions for model')
+        load_preds = np.load('preds_SL.npz')
+        pred_blend_train = logit(load_preds['pred_blend_train'])
+        assert pred_blend_train.shape[1] // 6 == len(model_dirs), "pred lenght don't match up with len dem model dirs {}, {}".format(pred_blend_train.shape[1]//6, len(model_dirs))
+        pred_blend_test = logit(load_preds['pred_blend_test'])
     print('pred test', pred_blend_test.shape)
-    # print(pred_blend_train.shape)
-    # pred_blend_test = np.split(pred_blend_test, 4, axis=1)
 
     coeffs = []
     all_estimates = []
     for c in range(len(list_classes)):
         clf = LogisticRegression(C=0.01, fit_intercept=False, penalty='l1')
+        # blenParams = {'C':[0.01, 0.5, 1.0], 'fit_intercept':[True, False], 'penalty':['l1', 'l2']}
+        # clf = GridSearchCV(LogisticRegression(), blenParams, scoring='neg_log_loss', refit='True', cv=5)
         train_preds = []
         test_preds = []
         for i in range(len(model_dirs)):
             train_preds.append(np.expand_dims(pred_blend_train[:, len(list_classes) * i + c], 1))
             test_preds.append(np.expand_dims(pred_blend_test[:, len(list_classes) * i + c], 1))
+
         train_preds = np.hstack(train_preds)
         test_preds = np.hstack(test_preds)
-
+        if np.any(np.isinf(train_preds)):
+            print('Encountered nan in train preds!')
+            train_preds[np.isinf(train_preds)] = np.median(train_preds[~np.isinf(train_preds)])
+        if np.any(np.isnan(test_preds)):
+            print('Encountered nan in train preds!')
+            train_preds[np.isnan(test_preds)] = np.median(test_preds[~np.isnan(test_preds)])
         clf.fit(train_preds, build_y_tr[:, c])
-
+        # print('best parameters of the blend: ', clf.best_params_)
+        # print('Best score: ', clf.best_score_)
         print('COEFS: ', clf.coef_)
-        coeffs.append(clf.coef_)
-        np.savez('superlearner_coefficients_{}.npz'.format(c), coef=coeffs)
+        # coeffs.append(clf.coef_)
+        # np.savez('superlearner_coefficients_{}.npz'.format(c), coef=coeffs)
 
         estimates = clf.predict_proba(test_preds)[:, 1]
         all_estimates.append(estimates)
@@ -337,15 +351,22 @@ def ensemble_submissions(in_list):
     return sum(np.array(in_list)) / float(len(in_list))
 
 if __name__ == '__main__':
-    # sub_dir = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-14-08:50:52.801519/'
+    sub_dir = '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_CUDNN-2018-03-02-22:23:00.042494/'
     # ensembler(sub_dir)
     # with open(word_idex_path, 'rb') as word_index_file:
     #     word_index = pkl.load(word_index_file)
     #
     # embeddings_mat, missing = load_fasttext_embeddings(EMBEDDING_FILE, word_index)
     # save_embeddings(embeddings_mat, missing)
-    stacking(['/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_Ensemble-2018-02-10-05:17:16.741376',
+
+    stacking(['/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_CUDNN-2018-03-02-22:23:00.042494',
+                '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_Ensemble-2018-02-10-05:17:16.741376',
         '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-12-23:20:14.481040',
               '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttext-wiki.en.bin-GRU_CUDNN-2018-02-23-11:42:06.347564',
               '/home/raymond/Documents/projects/toxic-comments/src/submissions/fasttextLim-wiki.en.vec-GRU_Ensemble-2018-02-14-08:50:52.801519'
               ])
+
+    # for file in os.listdir(model_dir):
+    #     if file.endswith(".npz"):
+    #         a = np.load(model_dir + file)
+    #         val_split = a['']

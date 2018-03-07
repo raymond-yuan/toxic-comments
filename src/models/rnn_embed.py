@@ -4,7 +4,7 @@
 
 from keras.models import Model
 from keras.layers import Dense, Embedding, Input, MaxoutDense, Activation, BatchNormalization, SpatialDropout1D
-from keras.layers import LSTM, GRU, Bidirectional, GlobalMaxPool1D, Dropout, CuDNNGRU, concatenate
+from keras.layers import LSTM, GRU, Bidirectional, GlobalMaxPool1D, Dropout, CuDNNGRU, concatenate, Conv1D
 from keras import optimizers
 from models.AttentionWithContext import AttentionWithContext
 from models.WeightedAttLayer import AttentionWeightedAverage
@@ -60,10 +60,10 @@ def get_cudnnGRU_model(embedding_matrix):
 
     # inp = utils.pad_seq(inp)
     x = Embedding(len(embedding_matrix), embed_size, weights=[embedding_matrix], trainable=False)(inp)
-    x = SpatialDropout1D(0.5)(x)
-    x = Bidirectional(CuDNNGRU(64, return_sequences=True))(x)
+    x = SpatialDropout1D(0.2)(x)
+    x = Bidirectional(CuDNNGRU(80, return_sequences=True))(x)
     x = Dropout(0.2)(x)
-    x = Bidirectional(CuDNNGRU(64, return_sequences=True))(x)
+    x = Bidirectional(CuDNNGRU(80, return_sequences=True))(x)
     # x = Dropout(0.15)(x)
     max_pool = GlobalMaxPool1D()(x)
     # x = AttentionWithContext()(x)
@@ -72,7 +72,37 @@ def get_cudnnGRU_model(embedding_matrix):
     x = Dense(64, activation="relu")(x)
 
     x = BatchNormalization()(x)
-    # x = Activation('relu')(x)
+    x = Dropout(0.2)(x)
+    x = Dense(6, activation="sigmoid")(x)
+    model = Model(inputs=inp, outputs=x)
+
+    adam = optimizers.Nadam(lr=0.001)
+    model.compile(loss='binary_crossentropy',
+                  optimizer=adam,
+                  metrics=['accuracy'])
+
+    return model
+
+def get_cnnGRU_model(embedding_matrix):
+    # embed_size = 128
+    inp = Input(shape=(None, ))
+
+    # inp = utils.pad_seq(inp)
+    x = Embedding(len(embedding_matrix), embed_size, weights=[embedding_matrix], trainable=False)(inp)
+    x = SpatialDropout1D(0.2)(x)
+    x = Bidirectional(CuDNNGRU(80, return_sequences=True))(x)
+    x = Dropout(0.2)(x)
+    x = Bidirectional(CuDNNGRU(80, return_sequences=True))(x)
+    x = Conv1D(64, kernel_size = 3, padding = "valid", kernel_initializer = "glorot_uniform")(x)
+
+    # x = Dropout(0.15)(x)
+    max_pool = GlobalMaxPool1D()(x)
+    # x = AttentionWithContext()(x)
+    att = AttentionWeightedAverage()(x)
+    x = concatenate([max_pool, att])
+    x = Dense(64, activation="relu")(x)
+
+    x = BatchNormalization()(x)
     x = Dropout(0.2)(x)
     x = Dense(6, activation="sigmoid")(x)
     model = Model(inputs=inp, outputs=x)

@@ -147,7 +147,7 @@ class Pipeline(object):
             print('Loading model weights from ' + file_path)
             return load_model(file_path,
                         custom_objects={'AttentionWeightedAverage': AttentionWeightedAverage})
-
+        print('loading model ', model_name)
         if model_name == 'GRU_Ensemble':
             model = get_GRU_model(self.embedding_matrix)
         elif model_name == 'GRU_CUDNN':
@@ -156,6 +156,8 @@ class Pipeline(object):
             model = get_GRU_Max_model(self.embedding_matrix)
         elif model_name == 'LSTM_baseline':
             model = get_LSTM_model()
+        elif model_name == 'cnnGRU':
+            model = get_cnnGRU_model(self.embedding_matrix)
         else:
             raise NotImplementedError('Unknown model config')
         return model
